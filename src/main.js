@@ -45,17 +45,22 @@ function init(){
 function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.65));}
 function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileInput.look={x:0,y:0};mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');player?.release(0);player?.release(1);}
 function requestControl(){
+  if(matchMedia('(pointer: coarse)').matches)return;
   if(document.pointerLockElement!==canvas&&canvas.requestPointerLock){
     try{const result=canvas.requestPointerLock();result?.catch?.(()=>{showToast('MOUSE CAPTURE UNAVAILABLE · DRAG TO AIM OR USE ARROW KEYS');});}catch{showToast('DRAG TO AIM · Q / E TO GRAPPLE');}
   }
+}
+async function enterImmersive(){
+  try{if(!document.fullscreenElement&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen({navigationUI:'hide'});}catch{}
+  try{if(screen.orientation?.lock)await screen.orientation.lock('landscape');}catch{}
 }
 function startOrResume(){
   started=true;paused=false;finished=false;
   menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
   mobileControls?.classList.remove('hidden');
   canvas.focus();accumulator=0;
+  if(matchMedia('(pointer: coarse)').matches)enterImmersive();
   requestControl();
-  if(matchMedia('(pointer: coarse)').matches&&screen.orientation?.lock){screen.orientation.lock('landscape').catch(()=>{});}
 }
 function halt(){if(!started||finished)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Unhook, reset your aim, and resume the run.';}
 function startFresh(freeFlight=false){practice=freeFlight;courseIndex=freeFlight?TOTAL:0;elapsed=0;finished=false;player.reset();aspectState=createAspectState();world.setBeaconActive(freeFlight?-1:0);$('checkpointNumber').textContent=freeFlight?'--':'01';clearInputs();startOrResume();hudUpdate();}
@@ -90,7 +95,9 @@ function savePhoto(){
 function mobileKey(code,pressed){if(pressed)input.keys.add(code);else input.keys.delete(code);}
 function setupTouchStick(id,type){
   const stick=$(id);if(!stick)return;
-  const end=()=>{
+  const end=(event)=>{
+    const pointer=type==='move'?mobileInput.movePointer:mobileInput.lookPointer;
+    if(event?.pointerId!=null&&pointer!==event.pointerId)return;
     if(type==='move'){mobileInput.movePointer=null;mobileInput.move={x:0,y:0};['KeyW','KeyA','KeyS','KeyD'].forEach((key)=>mobileKey(key,false));}
     else {mobileInput.lookPointer=null;mobileInput.look={x:0,y:0};}
     stick.classList.remove('active');stick.querySelector('span').style.transform='translate(-50%,-50%)';
@@ -107,6 +114,13 @@ function setupTouchStick(id,type){
   stick.addEventListener('pointerdown',(event)=>{if(!started||paused||finished)return;event.preventDefault();stick.setPointerCapture(event.pointerId);if(type==='move')mobileInput.movePointer=event.pointerId;else mobileInput.lookPointer=event.pointerId;stick.classList.add('active');update(event);});
   stick.addEventListener('pointermove',(event)=>{if((type==='move'?mobileInput.movePointer:mobileInput.lookPointer)!==event.pointerId)return;event.preventDefault();update(event);});
   stick.addEventListener('pointerup',end);stick.addEventListener('pointercancel',end);stick.addEventListener('lostpointercapture',end);
+  window.addEventListener('pointermove',(event)=>{if((type==='move'?mobileInput.movePointer:mobileInput.lookPointer)===event.pointerId)update(event);});
+  window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end);
+  if(!window.PointerEvent){
+    stick.addEventListener('touchstart',(event)=>{if(!started||paused||finished)return;const touch=event.changedTouches[0];event.preventDefault();if(type==='move')mobileInput.movePointer=touch.identifier;else mobileInput.lookPointer=touch.identifier;stick.classList.add('active');update(touch);},{passive:false});
+    stick.addEventListener('touchmove',(event)=>{const pointer=type==='move'?mobileInput.movePointer:mobileInput.lookPointer;const touch=[...event.changedTouches].find((item)=>item.identifier===pointer);if(!touch)return;event.preventDefault();update(touch);},{passive:false});
+    stick.addEventListener('touchend',(event)=>{const pointer=type==='move'?mobileInput.movePointer:mobileInput.lookPointer;if([...event.changedTouches].some((item)=>item.identifier===pointer))end({pointerId:pointer});});
+  }
 }
 function setupTouchButton(button){
   const action=button.dataset.touchAction;
