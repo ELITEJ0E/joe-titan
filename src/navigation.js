@@ -29,6 +29,12 @@ export function createNavigation(world, player, camera) {
     const cathedral=world.landmarks?.cathedral||[0,-13],plaza=world.landmarks?.plaza||[46.5,31];
     context.strokeStyle='#e1c08c';context.lineWidth=1.3;context.beginPath();context.arc(x(cathedral[0]),y(cathedral[1]),7,0,Math.PI*2);context.stroke();
     context.fillStyle='#e1c08c';context.fillRect(x(plaza[0])-2,y(plaza[1])-2,4,4);
+    const landmarkIcons=[
+      [world.landmarks?.citadel,'#c7a875','square'],[world.landmarks?.arena,'#cf9870','ring'],
+      [world.landmarks?.market,'#d8c695','diamond'],[world.landmarks?.townHall,'#f0dbad','spire'],[world.landmarks?.harbour,'#77aec1','harbour']
+    ];
+    for(const [point,color,kind] of landmarkIcons){if(!point)continue;const px=x(point[0]),py=y(point[1]);context.strokeStyle=color;context.fillStyle=color;context.lineWidth=1.2;
+      if(kind==='square'){context.strokeRect(px-3,py-3,6,6);}else if(kind==='ring'){context.beginPath();context.arc(px,py,4,0,Math.PI*2);context.stroke();}else if(kind==='diamond'){context.save();context.translate(px,py);context.rotate(Math.PI/4);context.fillRect(-2.7,-2.7,5.4,5.4);context.restore();}else if(kind==='spire'){context.beginPath();context.moveTo(px,py-5);context.lineTo(px-3.8,py+3);context.lineTo(px+3.8,py+3);context.closePath();context.fill();}else{context.fillRect(px-4,py-2,8,4);context.strokeRect(px-4,py-2,8,4);}}
     context.strokeStyle = '#edbc7870';context.setLineDash([3,4]);context.beginPath();
     world.beacons.forEach((beacon, i) => { const p=beacon.point;i?context.lineTo(x(p.x),y(p.z)):context.moveTo(x(p.x),y(p.z)); });
     context.stroke();context.setLineDash([]);
