@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createWorld} from './world.js';
+import {installMedievalCity} from './imported-city.js';
 import {createPlayer} from './player.js';
 import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
@@ -35,7 +36,16 @@ function init(){
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.14;
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.15,1600);
-  world=createWorld(scene);player=createPlayer(scene,world,camera);enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
+  world=createWorld(scene);player=createPlayer(scene,world,camera);
+  const oldWorldObjects=new Set(scene.children);
+  installMedievalCity(scene,world,oldWorldObjects,{
+    onReady:({meshes,anchors,spawn})=>{
+      if(!started || paused)player.reset();
+      showToast(`MEDIEVAL CITY LOADED · ${meshes} MESHES · ${anchors} ANCHORS`);
+      console.info('Imported medieval city ready',meshes,anchors,spawn);
+    },
+    onError:(error)=>console.info('Using existing procedural city:',error.message)
+  });enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
   camera.position.set(115,91,102);camera.lookAt(0,24,-10);
   window.addEventListener('resize',resize);
