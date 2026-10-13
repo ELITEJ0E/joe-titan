@@ -68,6 +68,14 @@ Use the left/right anchors independently or together. Hooks raycast against real
 - **Stability:** fixed the undefined movement heading that produced invalid coordinates and a blank scene. Added finite-coordinate and world-bound recovery, immediate camera reset, overhead collision checks, and focus-loss pausing.
 - **Rendering:** static city geometry is batched by material to reduce draw calls. Original collision and grapple geometry is retained for gameplay queries.
 
+## Build 0.6 — Asterfell city rebuild
+
+- **Layered medieval city:** Asterfell now has a landmark cathedral with bell tower and stained glass, an old-city defensive ring, gatehouses, full perimeter ramparts, crenellations, watchtowers and banners.
+- **Detailed streets:** procedural houses use terracotta tiled roofs, dormers, chimneys, timber framing, balconies, shutters, shop canopies and warm windows. A relocated civic square adds market stalls and a monument landing point.
+- **Canal infrastructure:** a reflective canal crosses the southern wards with stone quays, railings and seven traversable bridges. Entering the water now applies drag and buoyancy while bridge decks keep physical collision.
+- **Lighting and atmosphere:** warm low-angle sunlight, cool sky fill, sunset haze, window and cathedral glow, moving chimney smoke, clouds, layered mountains and snowcaps give the city depth from street and aerial views.
+- **Navigation and collision:** the tactical map now distinguishes water, both defensive rings, tall landmarks and ordinary rooftops. New civic structures, towers, ramparts and bridges participate in landing and wall collision.
+
 ## Verification
 
 ```bash
@@ -85,7 +93,7 @@ Nine original, temporary **Vanguard Aspects** are available with `1–9`, then `
 
 ## What's included
 
-- Original procedural 3D city: 120 buildings, architectural facades, pitched slate roofs, thousands of instanced windows, alley lighting, courtyards, trees, perimeter ramparts, guard towers and distant mountains.
+- Original procedural 3D city: more than 100 detailed buildings, a cathedral, market square, canal and bridges, two defensive wall systems, thousands of instanced windows, street lighting, trees, guard towers and a layered mountain horizon.
 - Fully modeled stylized protagonist constructed from primitives (not a rigged external asset), with dynamic gait, airborne pose, backpack and twin wrist grapplers.
 - Third-person spring camera with pointer lock, pitch/yaw, wall avoidance, cinematic speed FOV; optional first-person mode.
 - Dual ropes using tension spring impulses and semi-implicit fixed-time integration, winch reel-in, tether velocity projection, steering, gravity, gas propulsion and braking.
@@ -97,6 +105,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram, implementation de
 
 ## Status and limitations
 
-This is **playable prototype v0.5**, not a complete game. It includes procedural roaming enemies, a compact combat loop, responsive landscape mobile controls with dual virtual joysticks, and the JOE TITAN rebrand. It does not yet have authored skeletal character animation, mission scripting, narrative, multiplayer, navigation meshes, soundtrack or advanced postprocessing. Rope dynamics are a compact custom physics solver rather than Rapier. Physics collision with roof planes is simplified, especially for pitched roofs; small props and towers do not yet have accurate collision. Best experienced in a hardware-accelerated Chromium/Firefox/Edge browser.
+This is **playable prototype v0.6**, not a complete game. It includes procedural roaming enemies, a compact combat loop, cross-network two-player WebRTC rooms and responsive landscape mobile controls with dual virtual joysticks. It does not yet have authored skeletal character animation, mission scripting, narrative, navigation meshes, soundtrack or advanced postprocessing. Rope dynamics are a compact custom physics solver rather than Rapier. Roof collision uses simplified landing planes, while all major landmarks, walls, towers and bridges have collision volumes. Best experienced in a hardware-accelerated Chromium/Firefox/Edge browser.
 
 No affiliation with Attack on Titan, the reference game's developers, publishers, or any other game IP.

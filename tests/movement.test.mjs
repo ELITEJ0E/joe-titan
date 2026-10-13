@@ -21,7 +21,7 @@ test('WASD walking stays finite and follows yaw in all four directions',()=>{
     const s=setup(),start=s.player.position[axis];s.input.keys.add(key);step(s);
     assert.ok((s.player.position[axis]-start)*sign>5);assert.equal(s.player.recoveries,0);
   }
-  const s=setup();s.player.yaw=Math.PI/2;s.input.keys.add('KeyW');step(s);assert.ok(s.player.position.x<0);
+  const s=setup(),startX=s.player.position.x;s.player.yaw=Math.PI/2;s.input.keys.add('KeyW');step(s);assert.ok(s.player.position.x<startX-5);
 });
 test('jump, boost, landing and gas refill remain stable',()=>{
   const s=setup();s.input.jumpQueued=true;step(s,10);assert.ok(s.player.position.y>1);assert.equal(s.player.grounded,false);
@@ -44,7 +44,7 @@ test('roofs land from above, leave overhead movement alone and block side entry'
 });
 test('invalid coordinates and world escape recover once and reset camera immediately',()=>{
   const s=setup();s.player.fire(0);s.player.position.x=NaN;step(s,1);assert.equal(s.player.recoveries,1);assert.equal(s.player.hooks[0],null);
-  assert.deepEqual(s.player.position.toArray(),[8,1,-10]);assert.ok(s.camera.position.distanceTo(s.player.position)<15);
+  assert.deepEqual(s.player.position.toArray(),[34,1,31]);assert.ok(s.camera.position.distanceTo(s.player.position)<15);
   s.player.position.set(700,3,0);step(s,1);assert.equal(s.player.recoveries,2);
   s.player.velocity.z=Infinity;step(s,1);assert.equal(s.player.recoveries,3);step(s,100);assert.equal(s.player.recoveries,3);
 });

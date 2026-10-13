@@ -12,12 +12,23 @@ export function createNavigation(world, player, camera) {
   function update(index, practice, enemies=[], activeAspect=null) {
     context.clearRect(0, 0, map.width, map.height);
     context.fillStyle = '#0d202d';context.fillRect(0, 0, map.width, map.height);
-    context.strokeStyle='#2c5062';context.lineWidth=4;
+    // Water, ramparts and districts are rendered as separate layers so the map
+    // matches the actual geometry instead of reading as an undifferentiated grid.
+    const canalZ=world.landmarks?.canalZ??108;
+    context.fillStyle='#214b5d';context.fillRect(x(-165),y(canalZ-6),330*scale,12*scale);
+    context.strokeStyle='#9ab0b8';context.lineWidth=5;context.strokeRect(x(-188),y(-188),376*scale,376*scale);
+    context.strokeStyle='#718996';context.lineWidth=2.2;context.setLineDash([18*scale,9*scale]);context.strokeRect(x(-142),y(-142),284*scale,284*scale);context.setLineDash([]);
+    context.strokeStyle='#2c5062';context.lineWidth=3;
     for(const road of world.districtRoads||[]){context.beginPath();context.moveTo(x(road.a[0]),y(road.a[1]));context.lineTo(x(road.b[0]),y(road.b[1]));context.stroke();}
-    context.strokeStyle = '#668495';context.lineWidth = 1;
-    context.strokeRect(x(-188), y(-188), 376 * scale, 376 * scale);
-    context.fillStyle = '#435866';
-    for (const b of world.colliders) context.fillRect(x(b.x-b.halfW), y(b.z-b.halfD), b.halfW*2*scale, b.halfD*2*scale);
+    for (const b of world.colliders) {
+      if(b.halfW>45||b.halfD>45)continue;
+      context.fillStyle=b.h>40?'#9c7965':b.h>27?'#6f7880':'#435866';
+      context.fillRect(x(b.x-b.halfW), y(b.z-b.halfD), Math.max(1,b.halfW*2*scale), Math.max(1,b.halfD*2*scale));
+      if(b.h>27){context.strokeStyle='#c3aa91';context.lineWidth=.65;context.strokeRect(x(b.x-b.halfW),y(b.z-b.halfD),b.halfW*2*scale,b.halfD*2*scale);}
+    }
+    const cathedral=world.landmarks?.cathedral||[0,-13],plaza=world.landmarks?.plaza||[46.5,31];
+    context.strokeStyle='#e1c08c';context.lineWidth=1.3;context.beginPath();context.arc(x(cathedral[0]),y(cathedral[1]),7,0,Math.PI*2);context.stroke();
+    context.fillStyle='#e1c08c';context.fillRect(x(plaza[0])-2,y(plaza[1])-2,4,4);
     context.strokeStyle = '#edbc7870';context.setLineDash([3,4]);context.beginPath();
     world.beacons.forEach((beacon, i) => { const p=beacon.point;i?context.lineTo(x(p.x),y(p.z)):context.moveTo(x(p.x),y(p.z)); });
     context.stroke();context.setLineDash([]);

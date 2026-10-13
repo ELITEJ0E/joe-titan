@@ -276,8 +276,8 @@ function loop(ms){
   }else if(!started){
     // A gently orbiting live world is the title screen background.
     const a=seconds*.075+.6;
-    camera.position.set(Math.sin(a)*121,68+Math.sin(seconds*.21)*6,Math.cos(a)*121);
-    camera.lookAt(0,20,-7);
+    camera.position.set(Math.sin(a)*174,105+Math.sin(seconds*.21)*7,Math.cos(a)*174);
+    camera.lookAt(0,15,-8);
   }
   world.animate(gameTime,dt);
   if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
