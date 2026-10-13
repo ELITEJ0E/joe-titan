@@ -141,10 +141,10 @@ export function createPlayer(scene,world,camera){
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
   function reset(){
-    state.position.copy(DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.grounded=true;state.aspect=null;form.visible=false;
+    state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.grounded=true;state.aspect=null;form.visible=false;
     state.yaw=0;state.pitch=-.07;state.distance=0;state.speed=0;state.bank=0;state.boost=false;
     release(0);release(1);model.root.position.copy(state.position);model.root.rotation.set(0,0,0);model.tilt.rotation.set(0,0,0);
-    camera.position.set(35.15,4.86,42.57);updateCamera(1,true);
+    camera.position.copy(state.position).add(V(1.15,3.86,11.57));updateCamera(1,true);
   }
   const finiteVector=(v)=>[v.x,v.y,v.z].every(Number.isFinite);
   function ensureValid(){
