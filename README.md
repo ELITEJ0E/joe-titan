@@ -30,6 +30,10 @@ npm run build
 
 Upload the `dist/` folder. Static source also works directly on a static web host when the Three.js CDN is reachable.
 
+## Free co-op rooms
+
+JOE TITAN includes a lightweight two-player WebRTC co-op link through PeerJS Cloud, so no account or API key is required. On the landing screen, choose **CREATE ROOM**, copy the generated room code, and have a friend paste it into **JOIN**. The room synchronizes pilot position, facing and active Vanguard Aspect. PeerJS Cloud handles brokering; direct peer connections can still be unavailable on some restrictive networks because this free mode does not guarantee a TURN relay.
+
 ## Controls
 
 | Key | Action |

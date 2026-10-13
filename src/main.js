@@ -4,13 +4,14 @@ import {createPlayer} from './player.js';
 import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
 import {createEnemyManager} from './enemies.js';
+import {createMultiplayer} from './multiplayer.js';
 
 const $=(id)=>document.getElementById(id);
 const canvas=$('game');
 const hud=$('hud'),menu=$('menu'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
 const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},look:{x:0,y:0}};
-let renderer,scene,camera,world,player,navigation,enemies,aspectState;
+let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer;
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
 let hadPointerLock=false,practice=false,debugVisible=false,lastRecovery=0;
 const TOTAL=6;
@@ -35,6 +36,7 @@ function init(){
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.15,1600);
   world=createWorld(scene);player=createPlayer(scene,world,camera);enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
+  multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
   camera.position.set(115,91,102);camera.lookAt(0,24,-10);
   window.addEventListener('resize',resize);
   attachEvents();
@@ -128,6 +130,8 @@ function attachEvents(){
   $('freeFlightButton').onclick=()=>{practice=true;courseIndex=TOTAL;world.setBeaconActive(-1);startOrResume();hudUpdate();};
   $('trialButton').onclick=()=>startFresh();
   $('photoButton').onclick=()=>savePhoto();
+  $('createRoomButton').onclick=()=>{multiplayer.start();const code=multiplayer.createRoom();if(code){$('roomCodeInput').value=code;$('roomMessage').textContent=`ROOM CODE: ${code} · SHARE IT WITH A FRIEND`;}else $('roomMessage').textContent='CONNECTING TO PEER SERVER… YOUR ROOM CODE WILL APPEAR HERE';};
+  $('joinRoomButton').onclick=()=>{const code=$('roomCodeInput').value.trim();if(!code){$('roomMessage').textContent='ENTER A ROOM CODE FIRST';return;}multiplayer.joinRoom(code);$('roomMessage').textContent='CONNECTING TO ROOM…';};
   $('helpButton').onclick=()=>{if(document.pointerLockElement===canvas)document.exitPointerLock();halt();};
   setupTouchControls();
   canvas.addEventListener('contextmenu',(e)=>e.preventDefault());
@@ -244,6 +248,7 @@ function loop(ms){
       player.yaw-=mobileInput.look.x*.022;
       player.pitch-=mobileInput.look.y*.016;
       player.update(1/100,input,gameTime);
+      multiplayer?.update(player,gameTime);
       const aspectUpdate=updateAspect(aspectState,1/100);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
       const danger=enemies.update(1/100,player.position,gameTime);if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed)clearActiveAspect();showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
       updateChallenge(1/100);
