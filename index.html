@@ -10,6 +10,18 @@
 </head>
 <body>
   <canvas id="game" tabindex="0" aria-label="3D aerial grappling game"></canvas>
+  <div id="mobileControls" class="mobile-controls hidden" aria-label="Touch flight controls">
+    <div class="touch-stick" id="moveStick" role="application" aria-label="Move joystick"><span></span><small>MOVE</small></div>
+    <div class="touch-stick look-stick" id="lookStick" role="application" aria-label="Look joystick"><span></span><small>AIM</small></div>
+    <div class="touch-actions" aria-label="Flight actions">
+      <button class="touch-btn cable-left" data-touch-action="leftCable" type="button" aria-label="Left grappling cable">L</button>
+      <button class="touch-btn cable-right" data-touch-action="rightCable" type="button" aria-label="Right grappling cable">R</button>
+      <button class="touch-btn boost" data-touch-action="boost" type="button" aria-label="Jump and boost">BOOST</button>
+      <button class="touch-btn jump" data-touch-action="jump" type="button" aria-label="Jump">JUMP</button>
+      <button class="touch-btn attack" data-touch-action="attack" type="button" aria-label="Blade strike">STRIKE</button>
+      <button class="touch-btn aspect-btn" data-touch-action="aspect" type="button" aria-label="Activate selected aspect">ASPECT</button>
+    </div>
+  </div>
   <div class="grain"></div><div class="vignette"></div>
   <div id="hud" class="hud hidden">
     <header class="topbar">

@@ -7,8 +7,9 @@ import {createEnemyManager} from './enemies.js';
 
 const $=(id)=>document.getElementById(id);
 const canvas=$('game');
-const hud=$('hud'),menu=$('menu'),pause=$('pause'),complete=$('complete'),toast=$('toast');
+const hud=$('hud'),menu=$('menu'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
+const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},look:{x:0,y:0}};
 let renderer,scene,camera,world,player,navigation,enemies,aspectState;
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
 let hadPointerLock=false,practice=false,debugVisible=false,lastRecovery=0;
@@ -40,7 +41,7 @@ function init(){
   requestAnimationFrame(loop);
 }
 function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.65));}
-function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;player?.release(0);player?.release(1);}
+function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileInput.look={x:0,y:0};mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');player?.release(0);player?.release(1);}
 function requestControl(){
   if(document.pointerLockElement!==canvas&&canvas.requestPointerLock){
     try{const result=canvas.requestPointerLock();result?.catch?.(()=>{showToast('MOUSE CAPTURE UNAVAILABLE · DRAG TO AIM OR USE ARROW KEYS');});}catch{showToast('DRAG TO AIM · Q / E TO GRAPPLE');}
@@ -49,10 +50,12 @@ function requestControl(){
 function startOrResume(){
   started=true;paused=false;finished=false;
   menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
+  mobileControls?.classList.remove('hidden');
   canvas.focus();accumulator=0;
   requestControl();
+  if(matchMedia('(pointer: coarse)').matches&&screen.orientation?.lock){screen.orientation.lock('landscape').catch(()=>{});}
 }
-function halt(){if(!started||finished)return;paused=true;clearInputs();pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Unhook, reset your aim, and resume the run.';}
+function halt(){if(!started||finished)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Unhook, reset your aim, and resume the run.';}
 function startFresh(freeFlight=false){practice=freeFlight;courseIndex=freeFlight?TOTAL:0;elapsed=0;finished=false;player.reset();aspectState=createAspectState();world.setBeaconActive(freeFlight?-1:0);$('checkpointNumber').textContent=freeFlight?'--':'01';clearInputs();startOrResume();hudUpdate();}
 function clearActiveAspect(){aspectState.active=null;aspectState.duration=0;player.clearAspect();}
 function activateSelectedAspect(){
@@ -82,12 +85,51 @@ function savePhoto(){
     setTimeout(()=>URL.revokeObjectURL(url),1000);showToast('FLIGHT PHOTO SAVED');
   },'image/png');
 }
+function mobileKey(code,pressed){if(pressed)input.keys.add(code);else input.keys.delete(code);}
+function setupTouchStick(id,type){
+  const stick=$(id);if(!stick)return;
+  const end=()=>{
+    if(type==='move'){mobileInput.movePointer=null;mobileInput.move={x:0,y:0};['KeyW','KeyA','KeyS','KeyD'].forEach((key)=>mobileKey(key,false));}
+    else {mobileInput.lookPointer=null;mobileInput.look={x:0,y:0};}
+    stick.classList.remove('active');stick.querySelector('span').style.transform='translate(-50%,-50%)';
+  };
+  const update=(event)=>{
+    const rect=stick.getBoundingClientRect(),radius=Math.max(28,Math.min(rect.width,rect.height)*.37);
+    const dx=event.clientX-(rect.left+rect.width/2),dy=event.clientY-(rect.top+rect.height/2),length=Math.hypot(dx,dy),scale=length>radius?radius/length:1;
+    const x=dx*scale/radius,y=dy*scale/radius;stick.querySelector('span').style.transform=`translate(calc(-50% + ${x*radius}px),calc(-50% + ${y*radius}px))`;
+    if(type==='move'){
+      mobileInput.move={x,y};
+      mobileKey('KeyA',x<-.2);mobileKey('KeyD',x>.2);mobileKey('KeyW',y<-.2);mobileKey('KeyS',y>.2);
+    }else mobileInput.look={x,y};
+  };
+  stick.addEventListener('pointerdown',(event)=>{if(!started||paused||finished)return;event.preventDefault();stick.setPointerCapture(event.pointerId);if(type==='move')mobileInput.movePointer=event.pointerId;else mobileInput.lookPointer=event.pointerId;stick.classList.add('active');update(event);});
+  stick.addEventListener('pointermove',(event)=>{if((type==='move'?mobileInput.movePointer:mobileInput.lookPointer)!==event.pointerId)return;event.preventDefault();update(event);});
+  stick.addEventListener('pointerup',end);stick.addEventListener('pointercancel',end);stick.addEventListener('lostpointercapture',end);
+}
+function setupTouchButton(button){
+  const action=button.dataset.touchAction;
+  const set=(pressed)=>{
+    if(!started||paused||finished)return;
+    button.classList.toggle('active',pressed);
+    if(action==='jump'){if(pressed&&player.grounded)input.jumpQueued=true;return;}
+    if(action==='attack'){if(pressed)bladeStrike();return;}
+    if(action==='aspect'){if(pressed)activateSelectedAspect();return;}
+    const key={leftCable:'KeyQ',rightCable:'KeyE',boost:'Space'}[action];if(key)mobileKey(key,pressed);
+  };
+  button.addEventListener('pointerdown',(event)=>{event.preventDefault();button.setPointerCapture(event.pointerId);set(true);});
+  button.addEventListener('pointerup',()=>set(false));button.addEventListener('pointercancel',()=>set(false));button.addEventListener('lostpointercapture',()=>set(false));
+}
+function setupTouchControls(){
+  setupTouchStick('moveStick','move');setupTouchStick('lookStick','look');
+  mobileControls?.querySelectorAll('[data-touch-action]').forEach(setupTouchButton);
+}
 function attachEvents(){
   $('startButton').onclick=()=>startFresh();$('practiceButton').onclick=()=>startFresh(true);$('resumeButton').onclick=()=>startOrResume();$('restartButton').onclick=()=>startFresh(practice);$('againButton').onclick=()=>startFresh();
   $('freeFlightButton').onclick=()=>{practice=true;courseIndex=TOTAL;world.setBeaconActive(-1);startOrResume();hudUpdate();};
   $('trialButton').onclick=()=>startFresh();
   $('photoButton').onclick=()=>savePhoto();
   $('helpButton').onclick=()=>{if(document.pointerLockElement===canvas)document.exitPointerLock();halt();};
+  setupTouchControls();
   canvas.addEventListener('contextmenu',(e)=>e.preventDefault());
   window.addEventListener('blur',()=>{halt();if(document.pointerLockElement===canvas)document.exitPointerLock();});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)halt();});
@@ -141,7 +183,7 @@ function attachEvents(){
   });
 }
 function completeCourse(){
-  finished=true;clearInputs();hud.classList.add('hidden');complete.classList.remove('hidden');$('finalTime').textContent=formatTime(elapsed);
+  finished=true;clearInputs();mobileControls?.classList.add('hidden');hud.classList.add('hidden');complete.classList.remove('hidden');$('finalTime').textContent=formatTime(elapsed);
   let record=!best||elapsed<best;
   if(record){best=elapsed;try{localStorage.setItem('aetherline-best',String(best));}catch{}$('bestTime').textContent=formatTime(best);}
   $('recordMessage').textContent=record?'NEW PERSONAL BEST — CERTIFICATION RECORDED':'PERSONAL BEST — '+formatTime(best);
@@ -199,6 +241,8 @@ function loop(ms){
     while(accumulator>=1/100&&steps<6){
       player.yaw+=(Number(input.keys.has('ArrowLeft'))-Number(input.keys.has('ArrowRight')))*.018;
       player.pitch+=(Number(input.keys.has('ArrowUp'))-Number(input.keys.has('ArrowDown')))*.013;
+      player.yaw-=mobileInput.look.x*.022;
+      player.pitch-=mobileInput.look.y*.016;
       player.update(1/100,input,gameTime);
       const aspectUpdate=updateAspect(aspectState,1/100);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
       const danger=enemies.update(1/100,player.position,gameTime);if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed)clearActiveAspect();showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
