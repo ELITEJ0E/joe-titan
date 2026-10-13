@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101923" />
+  <title>AETHERLINE / Skyline Trials — ODM Prototype</title>
+  <meta name="description" content="A playable original browser-based aerial grappling traversal prototype." />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <canvas id="game" tabindex="0" aria-label="3D aerial grappling game"></canvas>
+  <div class="grain"></div><div class="vignette"></div>
+  <div id="hud" class="hud hidden">
+    <header class="topbar">
+      <div class="brand"><span class="brand-icon">✦</span><div class="brand-type"><strong>AETHERLINE</strong><small>SKYLINE TRIALS / BUILD 0.4</small></div></div>
+      <div class="mission"><small>CURRENT OBJECTIVE</small><strong id="missionText">Reach the golden signal beacon</strong></div>
+      <div class="hud-right"><span class="city-label"><span class="city-dot"></span> ASTERFELL · INNER WARD</span><button class="tiny-btn" id="helpButton" type="button">CONTROLS <span>H</span></button></div>
+    </header>
+    <div class="horizon"><span id="bearingLabel">N</span><span class="line-tick"></span><span>NE</span><span class="line-tick"></span><span>E</span></div>
+    <div id="reticle" class="reticle"><div class="reticle-ring"></div><div class="reticle-center"></div><span id="reticleText" class="reticle-label">READY TO LAUNCH</span></div>
+    <div id="waypoint" class="waypoint hidden"><span id="waypointArrow">◇</span><small id="waypointLabel"></small></div>
+    <aside id="mapPanel" class="map-panel"><div><span>ASTERFELL · TACTICAL MAP</span><span>N ↑</span></div><canvas id="minimap" width="360" height="360" role="img" aria-label="Detailed city map showing roads, buildings, your position, giant enemies and six course beacons"></canvas><small>BLUE: YOU · GOLD: OBJECTIVE · RED: RIFTBORN · M: TOGGLE</small></aside>
+    <aside class="threat-panel"><small>WARD THREAT</small><strong id="threatCount">06</strong><span>RIFTBORN ACTIVE</span></aside>
+    <pre id="diagnostics" class="diagnostics hidden" aria-label="Flight diagnostics"></pre>
+    <button id="trialButton" class="tiny-btn practice-trial hidden" type="button">START TIMED COURSE ↗</button>
+    <div class="left-info"><div class="label-kicker">TRAVERSAL COURSE</div><div class="checkpoint"><span id="checkpointNumber">01</span><span class="slash">/</span><span>06</span></div><div class="line-muted">BEACON <span id="beaconDistance">--</span> M AWAY</div><div class="small-rule"></div><div class="label-kicker">ELAPSED</div><div id="timer" class="timer">00:00.00</div><div class="line-muted">BEST <span id="bestTime">--:--.--</span></div></div>
+    <div id="toast" class="toast"></div>
+    <div class="bottom-hud"><div class="speed-module"><div class="gauge-circle"><div><span id="speed">000</span><small>KM / H</small></div></div><div class="speed-details"><span class="label-kicker">ALTITUDE</span><strong><span id="altitude">000</span><small> M</small></strong><span class="label-kicker">VERTICAL <span id="vertical">—</span></span></div></div><div class="systems"><div class="vitals"><div><span class="label-kicker">VITAL INTEGRITY</span><strong id="healthValue">100%</strong></div><div class="health-track"><div class="health-fill" id="healthFill"></div></div></div><div class="gas-head"><div><span class="label-kicker">PROPULSION GAS</span><strong id="gasPercent">100%</strong></div><div class="gas-track"><div class="gas-fill" id="gasFill"></div></div></div><div class="aspect"><span class="aspect-orb"></span><div><small>VANGUARD ASPECT</small><b id="aspectName">SKYREND</b><em id="aspectDescription">AERIAL OVERDRIVE</em></div><span class="aspect-key" id="aspectKey">1 SELECT · X ENGAGE</span><div class="aspect-track"><div id="aspectFill"></div></div></div><div class="hooks"><div class="hook left-hook" id="leftHook"><span class="hook-letter">L</span><div><small>LEFT ANCHOR</small><b id="leftState">STANDBY</b></div><span class="hook-key">LMB / Q</span></div><div class="hook right-hook" id="rightHook"><span class="hook-letter">R</span><div><small>RIGHT ANCHOR</small><b id="rightState">STANDBY</b></div><span class="hook-key">RMB / E</span></div></div></div><div class="quickkeys"><div><kbd>W A S D</kbd> MOVE</div><div><kbd>SPACE</kbd> JUMP / BOOST</div><div><kbd>SHIFT</kbd> REEL IN</div><div><kbd>F</kbd> BLADE STRIKE</div><div><kbd>1–9 / X</kbd> ASPECTS</div></div></div>
+    <div class="copyright">ORIGINAL EXPERIMENTAL GAMEPLAY · ALL GEOMETRY GENERATED IN CODE</div>
+  </div>
+  <div id="menu" class="overlay">
+    <div class="menu-shell">
+      <div class="overline"><span class="red-square"></span> ORIGINAL 3D GRAPPLING PROTOTYPE <span class="version">BUILD 0.4</span></div>
+      <div class="dividerline"></div>
+      <p class="eyebrow">THE CITY IS YOUR PLAYGROUND</p>
+      <h1>AETHER<span>LINE</span><i>.</i></h1>
+      <h2>SKYLINE TRIALS</h2>
+      <p class="intro">Master the momentum. Own the sky. Launch dual cable anchors between the towers of Asterfell and clear six aerial beacons in one fluid run.</p>
+      <div class="feature-row"><div><b>02</b><small>INDEPENDENT HOOKS</small></div><div><b>06</b><small>SKYLINE BEACONS</small></div><div><b>01</b><small>OPEN WORLD DISTRICT</small></div></div>
+      <button id="startButton" class="start" type="button">DEPLOY INTO ASTERFELL <span>↗</span></button>
+      <button id="practiceButton" class="secondary" type="button">FREE FLIGHT PRACTICE <span>↗</span></button>
+      <div id="startMessage" class="hint">Mouse + keyboard · Drag or arrow keys to aim if mouse capture is unavailable</div>
+      <div class="menu-controls"><div><span>LMB / RMB</span> Grappling anchors</div><div><span>WASD</span> Steering</div><div><span>SPACE</span> Jump and gas boost</div><div><span>SHIFT</span> Reel both cables</div><div><span>ESC</span> Pause</div></div>
+    </div>
+    <div class="menu-side"><div class="vertical-text">CITY OF ASTERFELL // AERIAL REGIMENT</div><div class="coordinates">48° 30′ N<br/>6° 40′ E<br/><span>DAWN · CLEAR SKIES</span></div></div>
+  </div>
+  <div id="pause" class="overlay pause hidden"><div class="menu-shell"><div class="overline">FLIGHT OPERATIONS / PAUSED</div><h2 class="pause-title" id="pauseTitle">FLIGHT PAUSED</h2><p class="intro" id="pauseMessage">Unhook, reset your aim, and resume the run.</p><button id="resumeButton" class="start" type="button">RESUME FLIGHT <span>↗</span></button><button id="restartButton" class="secondary" type="button">RESTART FLIGHT</button><button id="photoButton" class="secondary" type="button">SAVE FLIGHT PHOTO</button><div class="menu-controls compact"><div><span>LMB / Q</span> Left cable</div><div><span>RMB / E</span> Right cable</div><div><span>SHIFT</span> Reel in</div><div><span>SPACE</span> Boost</div><div><span>G</span> Brake</div><div><span>V</span> Toggle camera</div><div><span>R</span> Reset position</div><div><span>H / ESC</span> Pause</div><div><span>ARROWS</span> Aim camera</div><div><span>M</span> Toggle map</div><div><span>P</span> Save photo</div><div><span>F3</span> Flight diagnostics</div></div></div></div>
+  <div id="complete" class="overlay pause hidden"><div class="menu-shell"><div class="overline">ASTERFELL AERIAL REGIMENT / COURSE CLEARED</div><p class="eyebrow">CERTIFICATION COMPLETE</p><h2 class="pause-title">THE SKY IS YOURS.</h2><p class="intro">All six signal beacons cleared. Your flight time:</p><div id="finalTime" class="final-time">00:00.00</div><p class="hint" id="recordMessage"></p><button id="againButton" class="start" type="button">FLY AGAIN <span>↗</span></button><button id="freeFlightButton" class="secondary" type="button">CONTINUE FREE FLIGHT</button></div></div>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"}}</script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+import * as THREE from 'three';
+
+const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+const TYPES={
+  wanderer:{name:'Wanderer',height:15,speed:3.2,health:100,color:0x9b675c},
+  runner:{name:'Runner',height:12,speed:5.1,health:72,color:0xb88b73},
+  bruiser:{name:'Bruiser',height:20,speed:2.25,health:180,color:0x765659}
+};
+
+export function createEnemySimulation(spawns=[]){
+  const enemies=spawns.map((spawn,index)=>{
+    const type=TYPES[spawn.type]||TYPES.wanderer,position=V(...spawn.position);
+    return {id:spawn.id||`riftborn-${index}`,type:spawn.type||'wanderer',height:type.height,maxHealth:type.health,health:type.health,
+      speed:type.speed,position,patrol:V(...(spawn.patrol||spawn.position)),forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0};
+  });
+  function update(dt,playerPosition,decoyPosition=null,slow=1){
+    let damage=0;
+    for(const enemy of enemies){
+      if(!enemy.alive)continue;
+      enemy.attack=Math.max(0,enemy.attack-dt);enemy.stagger=Math.max(0,enemy.stagger-dt);
+      const target=decoyPosition||playerPosition,offset=target.clone().sub(enemy.position);offset.y=0;const distance=offset.length();
+      if(enemy.stagger>0){enemy.state='stagger';continue;}
+      if(distance<42)enemy.state='pursue';else if(enemy.state!=='patrol')enemy.state='return';
+      const destination=enemy.state==='pursue'?target:enemy.patrol;
+      const direction=destination.clone().sub(enemy.position);direction.y=0;
+      const targetDistance=direction.length();
+      if(targetDistance>.5){direction.multiplyScalar(1/targetDistance);enemy.forward.lerp(direction,Math.min(1,dt*4)).normalize();}
+      if(enemy.state==='pursue'&&distance<7){
+        enemy.state='strike';if(enemy.attack===0){enemy.attack=2.4;damage=12;}
+      }else if(targetDistance>.7){enemy.position.addScaledVector(enemy.forward,Math.min(targetDistance,enemy.speed*slow*dt));}
+      enemy.position.x=clamp(enemy.position.x,-181,181);enemy.position.z=clamp(enemy.position.z,-181,181);
+    }
+    return {damage};
+  }
+  return {enemies,update};
+}
+
+export function strikeWeakPoint(enemy,origin,direction,damage=18){
+  if(!enemy.alive)return {hit:false};
+  // The exposed nape sits on the forward-marked side of this original creature rig.
+  if(origin.clone().sub(enemy.position).dot(enemy.forward)<=.5)return {hit:false};
+  const point=enemy.position.clone().addScaledVector(enemy.forward,1.45).add(V(0,enemy.height*.82,0));
+  const ray=point.clone().sub(origin),distance=ray.length();ray.multiplyScalar(1/(distance||1));
+  const alignment=ray.dot(direction),closest=origin.clone().addScaledVector(direction,Math.max(0,point.clone().sub(origin).dot(direction)));
+  if(alignment<.87||closest.distanceTo(point)>2.35)return {hit:false};
+  enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.45;
+  if(enemy.health===0)enemy.alive=false;
+  return {hit:true,point,defeated:!enemy.alive,enemy};
+}
+
+function humanoid(scene,enemy){
+  const type=TYPES[enemy.type]||TYPES.wanderer,group=new THREE.Group(),skin=new THREE.MeshStandardMaterial({color:type.color,roughness:.82}),dark=new THREE.MeshStandardMaterial({color:0x3e3030,roughness:.9});
+  const body=new THREE.Mesh(new THREE.CapsuleGeometry(type.height*.105,type.height*.45,5,8),skin);body.position.y=type.height*.48;body.castShadow=true;group.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(type.height*.13,12,9),skin);head.position.y=type.height*.83;head.castShadow=true;group.add(head);
+  for(const side of [-1,1]){const arm=new THREE.Mesh(new THREE.CapsuleGeometry(type.height*.048,type.height*.34,4,6),skin);arm.position.set(side*type.height*.15,type.height*.56,0);arm.rotation.z=side*.18;arm.castShadow=true;group.add(arm);}
+  const weak=new THREE.Mesh(new THREE.SphereGeometry(type.height*.06,10,8),new THREE.MeshBasicMaterial({color:0xffd99a,transparent:true,opacity:.96}));weak.position.set(0,type.height*.82,type.height*.14);group.add(weak);
+  const shadow=new THREE.Mesh(new THREE.CircleGeometry(type.height*.3,16),new THREE.MeshBasicMaterial({color:0x11131a,transparent:true,opacity:.28,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.03;group.add(shadow);
+  group.position.copy(enemy.position);scene.add(group);enemy.group=group;enemy.weak=weak;return enemy;
+}
+
+export function createEnemyManager(scene,world){
+  const simulation=createEnemySimulation([
+    {type:'wanderer',position:[-72,0,-67],patrol:[-105,0,-91]}, {type:'runner',position:[75,0,-92],patrol:[110,0,-106]},
+    {type:'bruiser',position:[-117,0,75],patrol:[-132,0,110]}, {type:'wanderer',position:[98,0,83],patrol:[127,0,116]},
+    {type:'runner',position:[-58,0,112],patrol:[-94,0,128]}, {type:'wanderer',position:[135,0,8],patrol:[153,0,29]}
+  ]);
+  simulation.enemies.forEach(enemy=>humanoid(scene,enemy));
+  let slowTimer=0,decoyTimer=0,decoy=null;
+  function update(dt,playerPosition,time){
+    slowTimer=Math.max(0,slowTimer-dt);decoyTimer=Math.max(0,decoyTimer-dt);
+    const result=simulation.update(dt,playerPosition,decoyTimer>0?decoy:null,slowTimer>0?.48:1);
+    for(const enemy of simulation.enemies){
+      if(!enemy.group)continue;enemy.group.visible=enemy.alive;enemy.group.position.copy(enemy.position);enemy.group.rotation.y=Math.atan2(enemy.forward.x,enemy.forward.z);
+      const stride=Math.sin(time*(enemy.speed*2)+enemy.position.x)*.09;enemy.group.children[0].rotation.z=stride;
+      if(enemy.weak)enemy.weak.scale.setScalar(enemy.state==='stagger'?1.65:1+Math.sin(time*4)*.16);
+    }
+    return result;
+  }
+  function strike(origin,direction,damage=22){
+    const candidates=simulation.enemies.filter(enemy=>enemy.alive).sort((a,b)=>a.position.distanceToSquared(origin)-b.position.distanceToSquared(origin));
+    for(const enemy of candidates){const result=strikeWeakPoint(enemy,origin,direction,damage);if(result.hit)return result;}
+    return {hit:false};
+  }
+  function pulse(position,range,damage){let hits=0;for(const enemy of simulation.enemies){if(enemy.alive&&enemy.position.distanceTo(position)<=range){enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.9;if(enemy.health===0)enemy.alive=false;hits++;}}return hits;}
+  return {enemies:simulation.enemies,update,strike,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
+}

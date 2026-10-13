@@ -1,0 +1,223 @@
+import * as THREE from 'three';
+import {createWorld} from './world.js';
+import {createPlayer} from './player.js';
+import {createNavigation} from './navigation.js';
+import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
+import {createEnemyManager} from './enemies.js';
+
+const $=(id)=>document.getElementById(id);
+const canvas=$('game');
+const hud=$('hud'),menu=$('menu'),pause=$('pause'),complete=$('complete'),toast=$('toast');
+const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
+let renderer,scene,camera,world,player,navigation,enemies,aspectState;
+let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
+let hadPointerLock=false,practice=false,debugVisible=false,lastRecovery=0;
+const TOTAL=6;
+try{best=Number(localStorage.getItem('aetherline-best'))||null;}catch{}
+const formatTime=(t)=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}.${String(Math.floor((t%1)*100)).padStart(2,'0')}`;
+$('bestTime').textContent=best?formatTime(best):'--:--.--';
+function showToast(message){toast.textContent=message;toast.classList.add('show');toastUntil=performance.now()/1000+2.4;}
+function playBeep(type='hook'){
+  // Tiny synth feedback, no borrowed music or sound libraries.
+  try{const ctx=playBeep.ctx||(playBeep.ctx=new (window.AudioContext||window.webkitAudioContext)());if(ctx.state==='suspended')ctx.resume();
+    let osc=ctx.createOscillator(),gain=ctx.createGain(),now=ctx.currentTime;
+    osc.type=type==='beacon'?'sine':'triangle';
+    osc.frequency.setValueAtTime(type==='beacon'?600:220,now);osc.frequency.exponentialRampToValueAtTime(type==='beacon'?990:90,now+.16);
+    gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(type==='beacon'?.07:.03,now+.014);gain.gain.exponentialRampToValueAtTime(.0001,now+.22);osc.connect(gain).connect(ctx.destination);osc.start(now);osc.stop(now+.24);
+  }catch{}
+}
+function init(){
+  scene=new THREE.Scene();
+  renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+  renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.65));
+  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.14;
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.15,1600);
+  world=createWorld(scene);player=createPlayer(scene,world,camera);enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
+  camera.position.set(115,91,102);camera.lookAt(0,24,-10);
+  window.addEventListener('resize',resize);
+  attachEvents();
+  requestAnimationFrame(loop);
+}
+function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.65));}
+function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;player?.release(0);player?.release(1);}
+function requestControl(){
+  if(document.pointerLockElement!==canvas&&canvas.requestPointerLock){
+    try{const result=canvas.requestPointerLock();result?.catch?.(()=>{showToast('MOUSE CAPTURE UNAVAILABLE · DRAG TO AIM OR USE ARROW KEYS');});}catch{showToast('DRAG TO AIM · Q / E TO GRAPPLE');}
+  }
+}
+function startOrResume(){
+  started=true;paused=false;finished=false;
+  menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
+  canvas.focus();accumulator=0;
+  requestControl();
+}
+function halt(){if(!started||finished)return;paused=true;clearInputs();pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Unhook, reset your aim, and resume the run.';}
+function startFresh(freeFlight=false){practice=freeFlight;courseIndex=freeFlight?TOTAL:0;elapsed=0;finished=false;player.reset();aspectState=createAspectState();world.setBeaconActive(freeFlight?-1:0);$('checkpointNumber').textContent=freeFlight?'--':'01';clearInputs();startOrResume();hudUpdate();}
+function clearActiveAspect(){aspectState.active=null;aspectState.duration=0;player.clearAspect();}
+function activateSelectedAspect(){
+  const result=activateAspect(aspectState);
+  if(!result.ok){showToast(result.reason==='ACTIVE'?'ASPECT ALREADY ACTIVE':`RECHARGING · ${Math.ceil(result.remaining)} S`);return;}
+  const aspect=result.aspect;player.setAspect(aspect);
+  if(aspect.effect==='burst')player.velocity.addScaledVector(player.viewDirection(),28),player.velocity.y+=aspect.vertical;
+  if(aspect.effect==='gas')player.refillGas(aspect.gas);
+  if(aspect.effect==='recover')player.heal(aspect.heal);
+  if(aspect.effect==='pulse'||aspect.effect==='impact'){const hits=enemies.pulse(player.position,aspect.range,aspect.damage);showToast(`${aspect.name.toUpperCase()} · ${hits} RIFTBORN STAGGERED`);}
+  if(aspect.effect==='decoy')enemies.setDecoy(player.position);
+  if(aspect.effect==='command')enemies.suppress();
+  showToast(`${aspect.name.toUpperCase()} ASPECT ENGAGED`);
+}
+function bladeStrike(){
+  if(!player.attack())return;
+  const damage=player.aspect?.effect==='impact'?42:22,result=enemies.strike(camera.position,player.viewDirection(),damage);
+  if(result.hit)showToast(result.defeated?'RIFTBORN DISPERSED':'WEAK POINT STRIKE');
+  else showToast('BLADE MISSED · AIM FOR THE GLOWING NAPE');
+}
+function savePhoto(){
+  renderer.render(scene,camera);
+  canvas.toBlob((blob)=>{
+    if(!blob){showToast('PHOTO COULD NOT BE SAVED');return;}
+    const url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download='AETHERLINE-flight.png';link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);showToast('FLIGHT PHOTO SAVED');
+  },'image/png');
+}
+function attachEvents(){
+  $('startButton').onclick=()=>startFresh();$('practiceButton').onclick=()=>startFresh(true);$('resumeButton').onclick=()=>startOrResume();$('restartButton').onclick=()=>startFresh(practice);$('againButton').onclick=()=>startFresh();
+  $('freeFlightButton').onclick=()=>{practice=true;courseIndex=TOTAL;world.setBeaconActive(-1);startOrResume();hudUpdate();};
+  $('trialButton').onclick=()=>startFresh();
+  $('photoButton').onclick=()=>savePhoto();
+  $('helpButton').onclick=()=>{if(document.pointerLockElement===canvas)document.exitPointerLock();halt();};
+  canvas.addEventListener('contextmenu',(e)=>e.preventDefault());
+  window.addEventListener('blur',()=>{halt();if(document.pointerLockElement===canvas)document.exitPointerLock();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)halt();});
+  document.addEventListener('pointerlockchange',()=>{
+    const locked=document.pointerLockElement===canvas;
+    if(hadPointerLock&&!locked&&started&&!paused&&!finished)halt();
+    hadPointerLock=locked;
+  });
+  document.addEventListener('mousemove',(event)=>{
+    if(!started||paused||finished)return;
+    if(document.pointerLockElement!==canvas&&(document.activeElement!==canvas||!event.buttons))return;
+    const sensitivity=.00225;
+    player.yaw-=event.movementX*sensitivity;
+    player.pitch-=event.movementY*sensitivity;
+  });
+  canvas.addEventListener('mousedown',(event)=>{
+    if(!started||paused||finished)return;
+    canvas.focus();
+    if(event.button===0){input.mouse.left=true;if(player.fire(0))playBeep();}
+    else if(event.button===2){input.mouse.right=true;if(player.fire(1))playBeep();}
+  });
+  document.addEventListener('mouseup',(event)=>{
+    if(event.button===0){input.mouse.left=false;player.release(0);}
+    if(event.button===2){input.mouse.right=false;player.release(1);}
+  });
+  document.addEventListener('keydown',(event)=>{
+    if(started&&!paused&&!finished&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code))event.preventDefault();
+    if(event.code==='Escape'){halt();if(document.pointerLockElement===canvas)document.exitPointerLock();return;}
+    if(event.code==='KeyH'&&started&&!finished){if(document.pointerLockElement===canvas)document.exitPointerLock();halt();return;}
+    if(!started||paused||finished)return;
+    if(document.pointerLockElement!==canvas&&document.activeElement!==canvas)return;
+    if(!input.keys.has(event.code)){
+      if(event.code==='Space'&&player.grounded)input.jumpQueued=true;
+      if(event.code==='KeyQ'){if(player.fire(0))playBeep();}
+      if(event.code==='KeyE'){if(player.fire(1))playBeep();}
+      if(event.code==='KeyV'){player.firstPerson=!player.firstPerson;showToast(player.firstPerson?'FIRST-PERSON CAMERA':'THIRD-PERSON CAMERA');}
+      if(event.code==='KeyR'){player.reset();clearActiveAspect();showToast('REDEPLOYED TO CENTRAL PLAZA');}
+      if(event.code==='KeyM'){$('mapPanel').classList.toggle('hidden');}
+      if(event.code==='F3'){event.preventDefault();debugVisible=!debugVisible;$('diagnostics').classList.toggle('hidden',!debugVisible);}
+      if(event.code==='KeyP')savePhoto();
+      if(event.code==='KeyF')bladeStrike();
+      if(event.code==='KeyX')activateSelectedAspect();
+      if(/^Digit[1-9]$/.test(event.code)){const aspect=selectAspect(aspectState,Number(event.code.slice(-1))-1);showToast(`${aspect.name.toUpperCase()} SELECTED · X TO ENGAGE`);}
+    }
+    input.keys.add(event.code);
+  });
+  document.addEventListener('keyup',(event)=>{
+    input.keys.delete(event.code);
+    if(event.code==='KeyQ')player?.release(0);
+    if(event.code==='KeyE')player?.release(1);
+  });
+}
+function completeCourse(){
+  finished=true;clearInputs();hud.classList.add('hidden');complete.classList.remove('hidden');$('finalTime').textContent=formatTime(elapsed);
+  let record=!best||elapsed<best;
+  if(record){best=elapsed;try{localStorage.setItem('aetherline-best',String(best));}catch{}$('bestTime').textContent=formatTime(best);}
+  $('recordMessage').textContent=record?'NEW PERSONAL BEST — CERTIFICATION RECORDED':'PERSONAL BEST — '+formatTime(best);
+  if(document.pointerLockElement===canvas)document.exitPointerLock();playBeep('beacon');
+}
+function updateChallenge(dt){
+  if(courseIndex>=TOTAL)return;
+  elapsed+=dt;
+  const beacon=world.beacons[courseIndex],dist=player.position.distanceTo(beacon.group.position);
+  if(dist<7.4){
+    courseIndex++;playBeep('beacon');
+    if(courseIndex===TOTAL){completeCourse();return;}
+    world.setBeaconActive(courseIndex);showToast(`SIGNAL CAPTURED — ${String(courseIndex).padStart(2,'0')} / 06`);
+    $('checkpointNumber').textContent=String(courseIndex+1).padStart(2,'0');
+  }
+}
+function hudUpdate(){
+  $('speed').textContent=String(Math.round(player.speed*3.6)).padStart(3,'0');
+  $('altitude').textContent=String(Math.max(0,Math.round(player.position.y-1))).padStart(3,'0');
+  $('gasPercent').textContent=Math.round(player.gas)+'%';$('gasFill').style.width=Math.round(player.gas)+'%';
+  $('gasFill').style.background=player.gas<19?'linear-gradient(90deg,#d67567,#f2a28d)':'linear-gradient(90deg,#e8b27a,#f9dcb0)';
+  $('timer').textContent=formatTime(elapsed);
+  $('vertical').textContent=player.velocity.y>1?'↑ CLIMB':player.velocity.y< -1?'↓ DESCEND':'— LEVEL';
+  const l=!!player.hooks[0],r=!!player.hooks[1];
+  $('leftHook').classList.toggle('active',l);$('rightHook').classList.toggle('active',r);
+  $('leftState').textContent=l?'LOCKED':'STANDBY';$('rightState').textContent=r?'LOCKED':'STANDBY';
+  $('bearingLabel').textContent=['N','NE','E','SE','S','SW','W','NW'][(Math.round(((-player.yaw%(Math.PI*2)+Math.PI*2)%(Math.PI*2))/(Math.PI/4)))%8];
+  if(courseIndex<TOTAL){
+    const d=player.position.distanceTo(world.beacons[courseIndex].point);
+    $('beaconDistance').textContent=Math.round(d);
+    $('missionText').textContent=`Reach signal beacon ${String(courseIndex+1).padStart(2,'0')} / 06`;
+  }else{$('beaconDistance').textContent='--';$('missionText').textContent='Free flight — explore Asterfell';}
+  $('reticleText').textContent=l&&r?'DUAL ANCHOR LOCK':l?'LEFT CABLE ATTACHED':r?'RIGHT CABLE ATTACHED':'HOLD LMB / RMB TO GRAPPLE';
+  if(!l&&!r){const target=player.target(0);$('reticle').classList.toggle('available',!!target);$('reticleText').textContent=target?`ANCHOR READY · ${Math.round(target.distanceTo(player.position))} M`:'NO ANCHOR IN RANGE';}
+  else $('reticle').classList.remove('available');
+  $('trialButton').classList.toggle('hidden',!practice);
+  const selected=ASPECTS[aspectState.selected],active=aspectState.active;
+  $('aspectName').textContent=active?active.name.toUpperCase():selected.name.toUpperCase();
+  $('aspectDescription').textContent=active?`${Math.ceil(aspectState.duration)} S ACTIVE`:selected.description.toUpperCase();
+  $('aspectKey').textContent=active?'X ACTIVE':`${selected.key} SELECT · X ENGAGE`;
+  $('aspectFill').style.width=`${active?aspectState.duration/active.duration*100:Math.max(0,1-aspectState.cooldown/selected.cooldown)*100}%`;
+  $('healthFill').style.width=`${player.health}%`;$('healthValue').textContent=`${Math.ceil(player.health)}%`;
+  $('threatCount').textContent=String(enemies.living()).padStart(2,'0');
+  navigation.update(courseIndex,practice,enemies.enemies,active);
+  if(debugVisible)$('diagnostics').textContent=`POSITION ${player.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nSPEED ${player.speed.toFixed(1)} m/s · ${player.grounded?'GROUNDED':'AIRBORNE'}\nCAMERA ${camera.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nRECOVERIES ${player.recoveries} · DRAW CALLS ${renderer.info.render.calls}`;
+}
+let prevTime=0,accumulator=0;
+function loop(ms){
+  requestAnimationFrame(loop);
+  const seconds=ms*.001,dt=Math.min(prevTime?seconds-prevTime:.016,.06);prevTime=seconds;
+  gameTime+=dt;
+  if(started&&!paused&&!finished){
+    accumulator+=dt;
+    let steps=0;
+    while(accumulator>=1/100&&steps<6){
+      player.yaw+=(Number(input.keys.has('ArrowLeft'))-Number(input.keys.has('ArrowRight')))*.018;
+      player.pitch+=(Number(input.keys.has('ArrowUp'))-Number(input.keys.has('ArrowDown')))*.013;
+      player.update(1/100,input,gameTime);
+      const aspectUpdate=updateAspect(aspectState,1/100);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
+      const danger=enemies.update(1/100,player.position,gameTime);if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed)clearActiveAspect();showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
+      updateChallenge(1/100);
+      accumulator-=1/100;steps++;
+      if(paused||finished){accumulator=0;break;}
+    }
+    if(steps>=6)accumulator=0;
+    player.updateCamera(dt);
+    if(player.recoveries>lastRecovery){lastRecovery=player.recoveries;clearInputs();showToast('FLIGHT RECOVERED · REDEPLOYED TO CENTRAL PLAZA');}
+    if(gameTime-lastHud>.08){hudUpdate();lastHud=gameTime;}
+  }else if(!started){
+    // A gently orbiting live world is the title screen background.
+    const a=seconds*.075+.6;
+    camera.position.set(Math.sin(a)*121,68+Math.sin(seconds*.21)*6,Math.cos(a)*121);
+    camera.lookAt(0,20,-7);
+  }
+  world.animate(gameTime,dt);
+  if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
+  renderer.render(scene,camera);
+}
+try{init();}catch(error){console.error(error);$('startMessage').textContent='Unable to initialize 3D renderer: '+error.message;$('startButton').disabled=true;}
