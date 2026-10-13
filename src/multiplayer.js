@@ -2,6 +2,11 @@ import {Peer} from 'peerjs';
 import * as THREE from 'three';
 
 const COLORS=['#8fe8ff','#f4bd88','#c6a7ff','#9be6a0'];
+const ICE_SERVERS=[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'stun:stun.cloudflare.com:3478'}
+];
 
 function makeRemoteAvatar(scene,index=0){
   const group=new THREE.Group();
@@ -38,14 +43,16 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
   const ensurePeer=()=>{
     if(peer||started)return;
     started=true;setStatus('CONNECTING');
-    peer=new Peer();
+    peer=new Peer({config:{iceServers:ICE_SERVERS},debug:1});
     peer.on('open',(id)=>{peerId=id;setStatus('READY','Create a room or enter a room code');if(pendingRoom){const room=pendingRoom;pendingRoom='';bindConnection(peer.connect(room,{reliable:true,serialization:'json'}));}});
     peer.on('connection',(connection)=>bindConnection(connection));
     peer.on('error',(error)=>setStatus('ERROR',error.type==='peer-unavailable'?'Room not found':'Peer connection unavailable'));
   };
   const bindConnection=(connection)=>{
     connections.set(connection.peer,connection);
-    connection.on('open',()=>{connection.send({type:'hello',name:'JOE TITAN pilot'});setStatus('CONNECTED',`${connections.size} pilot${connections.size===1?'':'s'} online`);onCount(connections.size);});
+    let timedOut=false;
+    const timeout=setTimeout(()=>{if(connection.open)return;timedOut=true;connection.close();setStatus('ERROR','ROOM CONNECTION TIMED OUT · RETRY JOIN');},12000);
+    connection.on('open',()=>{clearTimeout(timeout);connection.send({type:'hello',name:'JOE TITAN pilot'});setStatus('CONNECTED',`${connections.size} pilot${connections.size===1?'':'s'} online`);onCount(connections.size);});
     connection.on('data',(message)=>{
       if(!message||message.type!=='state')return;
       const state={x:Number(message.state?.x)||0,y:Number(message.state?.y)||0,z:Number(message.state?.z)||0,yaw:Number(message.state?.yaw)||0,aspect:String(message.state?.aspect||'')};
@@ -55,13 +62,13 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
       avatar.userData.ring.rotation.z+=.035;avatar.userData.jetL.scale.y=state.aspect?1.25:1;avatar.userData.jetR.scale.y=state.aspect?1.25:1;
       onCount(connections.size);
     });
-    const close=()=>{connections.delete(connection.peer);remoteStates.delete(connection.peer);const avatar=avatars.get(connection.peer);if(avatar){scene.remove(avatar);avatar.traverse((node)=>{node.geometry?.dispose?.();node.material?.dispose?.();});avatars.delete(connection.peer);}onCount(connections.size);setStatus(connections.size?'CONNECTED':'READY',connections.size?`${connections.size} pilot online`:'Room ready');};
-    connection.on('close',close);connection.on('error',close);
+    const close=()=>{clearTimeout(timeout);connections.delete(connection.peer);remoteStates.delete(connection.peer);const avatar=avatars.get(connection.peer);if(avatar){scene.remove(avatar);avatar.traverse((node)=>{node.geometry?.dispose?.();node.material?.dispose?.();});avatars.delete(connection.peer);}onCount(connections.size);if(!timedOut)setStatus(connections.size?'CONNECTED':'READY',connections.size?`${connections.size} pilot online`:'Room ready');};
+    connection.on('close',close);connection.on('error',()=>{timedOut=true;setStatus('ERROR','ROOM CONNECTION FAILED · RETRY JOIN');close();});
   };
   return {
     start:ensurePeer,
     createRoom(){ensurePeer();return peerId;},
-    joinRoom(room){ensurePeer();const code=String(room||'').trim();if(!code)return false;if(!peerId){pendingRoom=code;return true;}const connection=peer.connect(code,{reliable:true,serialization:'json'});bindConnection(connection);return true;},
+    joinRoom(room){ensurePeer();const code=String(room||'').replace(/\s+/g,'').trim();if(!code)return false;if(!peerId){pendingRoom=code;return true;}const connection=peer.connect(code,{reliable:true,serialization:'json'});bindConnection(connection);return true;},
     update(state,time){if(!peerId||time-lastBroadcast<.08)return;lastBroadcast=time;const packet={type:'state',state:{x:state.position.x,y:state.position.y,z:state.position.z,yaw:state.yaw,aspect:state.aspect?.name||''}};connections.forEach((connection)=>{if(connection.open)connection.send(packet);});},
     roomCode(){return peerId;},
     playerCount(){return connections.size;},
