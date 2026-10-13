@@ -37,7 +37,7 @@ export function createWorld(scene){
   const roadTex=texturedCanvas(1337,'road');roadTex.repeat.set(55,55);
   const roadMat=new THREE.MeshStandardMaterial({map:roadTex,color:0x9da3a6,roughness:1});
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(1200,1200),roadMat);ground.rotation.x=-Math.PI/2;ground.position.y=-.09;ground.receiveShadow=true;scene.add(ground);
-  const roadSurface=createMat(0x62686b);
+  const roadSurface=createMat(0x79766d);
   // Asterfell is organised around a few memorable routes instead of a uniform grid:
   // the cathedral promenade, royal crossway, old-city lane and a diagonal trade route.
   const seamMat=createMat(0x959086);
@@ -59,6 +59,9 @@ export function createWorld(scene){
   const walls=palette.limestone.map(c=>new THREE.MeshStandardMaterial({color:c,map:plaster,roughness:.92}));
   const roofs=palette.roof.map(c=>new THREE.MeshStandardMaterial({color:c,map:tiles,roughness:.83,metalness:.04,side:THREE.DoubleSide}));
   const wood=createMat(0x584b45),trim=createMat(0xdbd0b7),dark=createMat(0x394856),gold=createMat(0xd9b780,.53,.2),stone=createMat(0x858e91);
+  const slateRoof=new THREE.MeshStandardMaterial({color:0x364d58,map:tiles,roughness:.77,metalness:.10,side:THREE.DoubleSide});
+  const copperRoof=new THREE.MeshStandardMaterial({color:0x47766e,map:tiles,roughness:.64,metalness:.24,side:THREE.DoubleSide});
+  const marketRoof=new THREE.MeshStandardMaterial({color:0xbf8a5c,map:tiles,roughness:.82,side:THREE.DoubleSide});
   const windowLists={warm:[],cool:[],frame:[]};
   const treePoints=[];const step=31;
   function addAnchor(x,y,z){world.anchors.push(V(x,y,z));}
@@ -83,12 +86,12 @@ export function createWorld(scene){
     const jitter=layout.jitter??1.8;x+=(rng()-.5)*jitter;z+=(rng()-.5)*jitter;
     const edge=Math.max(Math.abs(x),Math.abs(z))/step;
     const w=layout.w??(17+rng()*6.8),d=layout.d??(17+rng()*6.8),h=layout.h??(13+Math.floor(rng()*5)*3.6+(rng()<.13?10:0)+(edge>3?5:0));
-    const rise=layout.rise??(2.8+rng()*2.4);const p=layout.wall??Math.floor(rng()*walls.length),r=layout.roof??Math.floor(rng()*roofs.length);
+    const rise=layout.rise??(2.8+rng()*2.4);const p=layout.wall??Math.floor(rng()*walls.length),r=layout.roof??Math.floor(rng()*roofs.length),roofMaterial=layout.roofMaterial??roofs[r];
     const base=box(scene,w,h,d,x,h/2,z,walls[p]);world.grappleMeshes.push(base);
     // Base / lintel bands, thin gutters and parapet.
     box(scene,w+.5,.62,d+.5,x,1.1,z,stone);box(scene,w+.85,.4,d+.85,x,h-.42,z,trim);
     const alongX=layout.alongX??(rng()>.5);
-    makeRoof(x,z,w,d,h,rise,roofs[r],alongX);
+    makeRoof(x,z,w,d,h,rise,roofMaterial,alongX);
     const roofY=h+rise;
     world.colliders.push({x,z,h:roofY,halfW:w/2,halfD:d/2});
     for(let t=-1;t<=1;t+=2){
@@ -175,11 +178,11 @@ export function createWorld(scene){
   ward(138,94,1,1,25,23,{h:25,alongX:true});
   // Landmark builders give the city several different silhouettes and destinations.
   function landmarkBox(w,h,d,x,z,material=walls[1]){const mesh=box(scene,w,h,d,x,h/2,z,material);world.grappleMeshes.push(mesh);addCollider(x,z,h,w,d);return mesh;}
-  function landmarkTower(x,z,h=42,r=5,material=walls[3]){
-    const tower=new THREE.Mesh(new THREE.CylinderGeometry(r+1,r,h,10),material);tower.position.set(x,h/2,z);tower.castShadow=true;tower.receiveShadow=true;scene.add(tower);world.grappleMeshes.push(tower);addCollider(x,z,h+10,r*2,r*2);cone(scene,r+2,10,x,h+5,z,roofs[0],8);addAnchor(x,h+11,z);
+  function landmarkTower(x,z,h=42,r=5,material=walls[3],roofMaterial=slateRoof){
+    const tower=new THREE.Mesh(new THREE.CylinderGeometry(r+1,r,h,10),material);tower.position.set(x,h/2,z);tower.castShadow=true;tower.receiveShadow=true;scene.add(tower);world.grappleMeshes.push(tower);addCollider(x,z,h+10,r*2,r*2);cone(scene,r+2,10,x,h+5,z,roofMaterial,8);addAnchor(x,h+11,z);
   }
   // Citadel of the western ridge: a raised keep and four visible corner towers.
-  const citadelX=-92,citadelZ=-74;box(scene,62,3.4,52,citadelX,1.7,citadelZ,stone);landmarkBox(31,31,26,citadelX,citadelZ,walls[4]);makeRoof(citadelX,citadelZ,31,26,31,8,roofs[2],true);
+  const citadelX=-92,citadelZ=-74;box(scene,62,3.4,52,citadelX,1.7,citadelZ,stone);landmarkBox(31,31,26,citadelX,citadelZ,walls[4]);makeRoof(citadelX,citadelZ,31,26,31,8,slateRoof,true);
   for(const sx of [-1,1])for(const sz of [-1,1])landmarkTower(citadelX+sx*25,citadelZ+sz*20,48,6,walls[3]);
   box(scene,42,10,3,citadelX,5,citadelZ+28,stone);addAnchor(citadelX,42,citadelZ);
   // A circular arena creates a low, unmistakable shape at the western crossway.
@@ -187,14 +190,14 @@ export function createWorld(scene){
   const arena=new THREE.Mesh(new THREE.CylinderGeometry(22,25,11,18,1,true),arenaMat);arena.position.set(-77,5.5,42);arena.castShadow=true;arena.receiveShadow=true;scene.add(arena);world.grappleMeshes.push(arena);addCollider(-77,42,11,50,50);
   for(let i=0;i<12;i++){const a=i/12*Math.PI*2;const ax=-77+Math.cos(a)*22,az=42+Math.sin(a)*22;box(scene,3.2,4.5,3.2,ax,13,az,trim);addAnchor(ax,17,az);}
   // Merchant hall: open arcade, striped market roof and a civic clock tower at the square.
-  const marketX=72,marketZ=71;landmarkBox(48,15,17,marketX,marketZ,walls[0]);makeRoof(marketX,marketZ,48,17,15,6,roofs[4],true);
+  const marketX=72,marketZ=71;landmarkBox(48,15,17,marketX,marketZ,walls[0]);makeRoof(marketX,marketZ,48,17,15,6,marketRoof,true);
   for(let x=marketX-18;x<=marketX+18;x+=9){box(scene,2.1,8,.7,x,4.2,marketZ-8.8,stone);box(scene,2.1,8,.7,x,4.2,marketZ+8.8,stone);}
   const hallAwning=createMat(0xb66d4c);for(let x=marketX-18;x<=marketX+18;x+=9)box(scene,6.5,.24,2.2,x,7.6,marketZ-10,hallAwning,false);
-  const townX=79,townZ=26;landmarkBox(18,24,16,townX,townZ,walls[2]);makeRoof(townX,townZ,18,16,24,6,roofs[0],true);landmarkTower(townX,townZ-4,51,5,walls[2]);
+  const townX=79,townZ=26;landmarkBox(18,24,16,townX,townZ,walls[2]);makeRoof(townX,townZ,18,16,24,6,copperRoof,true);landmarkTower(townX,townZ-4,51,5,walls[2],copperRoof);
   const clockMat=new THREE.MeshStandardMaterial({color:0xf2dfb8,emissive:0x604532,emissiveIntensity:.16,roughness:.45});
   const clock=new THREE.Mesh(new THREE.CircleGeometry(2.15,20),clockMat);clock.position.set(townX,41.5,townZ-9.05);clock.rotation.y=Math.PI;scene.add(clock);
   // Canal harbour: broad warehouse roofs, mooring platforms and two loading cranes.
-  const harbourX=116,harbourZ=88,harbourIron=createMat(0x304654);landmarkBox(37,18,18,harbourX,harbourZ,walls[5]);makeRoof(harbourX,harbourZ,37,18,18,6,roofs[5],true);
+  const harbourX=116,harbourZ=88,harbourIron=createMat(0x304654);landmarkBox(37,18,18,harbourX,harbourZ,walls[5]);makeRoof(harbourX,harbourZ,37,18,18,6,slateRoof,true);
   for(const sx of [-1,1]){box(scene,.8,18,.8,harbourX+sx*24,9,99,harbourIron);box(scene,15,.65,.65,harbourX+sx*17,17,99,harbourIron);box(scene,.22,5,.22,harbourX+sx*10,14.7,99,gold,false);addAnchor(harbourX+sx*24,19,99);}
   function instancedWindows(list,mat,isFrame){
     const geo=new THREE.BoxGeometry(isFrame?1.45:1.1,isFrame?2.25:1.85,isFrame?.12:.12);
@@ -206,11 +209,18 @@ export function createWorld(scene){
   instancedWindows(windowLists.warm,new THREE.MeshStandardMaterial({color:0xffc47a,emissive:0x9d531e,emissiveIntensity:.57,roughness:.35}),false);
   instancedWindows(windowLists.cool,new THREE.MeshStandardMaterial({color:0x3d596c,roughness:.25,metalness:.19}),false);
   // Grand cathedral and civic square form the visual heart of Asterfell.
-  const cathedralWall=walls[2],cathedralRoof=roofs[1],glass=new THREE.MeshStandardMaterial({color:0x304f63,emissive:0xd18a4b,emissiveIntensity:.28,roughness:.2,metalness:.15});
+  const cathedralWall=walls[2],cathedralRoof=copperRoof,glass=new THREE.MeshStandardMaterial({color:0x304f63,emissive:0xd18a4b,emissiveIntensity:.28,roughness:.2,metalness:.15});
   const nave=box(scene,25,22,48,0,11,-13,cathedralWall);world.grappleMeshes.push(nave);makeRoof(0,-13,25,48,22,8,cathedralRoof,true);addCollider(0,-13,30,25,48);
   const transept=box(scene,47,17,18,0,8.5,-15,cathedralWall);world.grappleMeshes.push(transept);makeRoof(0,-15,47,18,17,6,cathedralRoof,false);addCollider(0,-15,23,47,18);
   const bellTower=box(scene,11,46,12,0,23,13,cathedralWall);world.grappleMeshes.push(bellTower);addCollider(0,13,57,11,12);
   box(scene,13,2.3,14,0,44.8,13,trim);cone(scene,8.4,22,0,57,13,cathedralRoof,8);addAnchor(0,69,13);
+  // A broad west facade and twin belfries break the tower-house silhouette and
+  // make the cathedral identifiable from the outer walls and title-camera flyover.
+  const facade=box(scene,43,28,4.5,0,14,20.2,cathedralWall);world.grappleMeshes.push(facade);
+  for(const sx of [-1,1]){const frontTower=box(scene,8.5,39,8.5,sx*16.5,19.5,18,cathedralWall);world.grappleMeshes.push(frontTower);cone(scene,6.2,15,sx*16.5,46.5,18,cathedralRoof,8);addCollider(sx*16.5,18,54,8.5,8.5);addAnchor(sx*16.5,54,18);}
+  const grandPortal=new THREE.Mesh(new THREE.TorusGeometry(4.6,.42,10,28,Math.PI),trim);grandPortal.position.set(0,8.2,22.55);grandPortal.rotation.z=Math.PI;scene.add(grandPortal);
+  const facadeRose=new THREE.Mesh(new THREE.TorusGeometry(4.25,.34,10,32),glass);facadeRose.position.set(0,21,22.6);scene.add(facadeRose);
+  for(let i=0;i<10;i++){const spoke=box(scene,.14,7.8,.14,0,21,22.64,trim,false);spoke.rotation.z=i*Math.PI/5;}
   for(const sx of [-1,1]){
     const rearTower=box(scene,7.2,30,7.2,sx*9.5,15,-34,cathedralWall);world.grappleMeshes.push(rearTower);cone(scene,5.1,13,sx*9.5,36.5,-34,cathedralRoof,8);addCollider(sx*9.5,-34,43,7.2,7.2);addAnchor(sx*9.5,44,-34);
   }
@@ -281,6 +291,8 @@ export function createWorld(scene){
   const plazaMat=createMat(0xb0afa4),marketCanvas=createMat(0x8d6356),marketCream=createMat(0xd7ba84);
   const plazaX=46.5,plazaZ=31;
   box(scene,48,.25,25,plazaX,.07,plazaZ,plazaMat,false);
+  const fountainBase=new THREE.Mesh(new THREE.CylinderGeometry(8.2,9.4,1.2,18),trim);fountainBase.position.set(plazaX,.64,plazaZ);fountainBase.castShadow=true;fountainBase.receiveShadow=true;scene.add(fountainBase);
+  const fountainWater=new THREE.Mesh(new THREE.CylinderGeometry(6.9,6.9,.12,24),waterMat);fountainWater.position.set(plazaX,1.27,plazaZ);fountainWater.receiveShadow=true;scene.add(fountainWater);
   const obelisk=box(scene,3.6,18,3.6,plazaX,9,plazaZ,stone);world.grappleMeshes.push(obelisk);cone(scene,3,6,plazaX,21,plazaZ,gold,4);addAnchor(plazaX,25,plazaZ);addCollider(plazaX,plazaZ,24,3.6,3.6);
   for(let i=0;i<4;i++){
     const a=i*Math.PI/2;const x=plazaX+Math.sin(a)*11,z=plazaZ+Math.cos(a)*11;
@@ -307,6 +319,11 @@ export function createWorld(scene){
       world.lamps.push(flame);
     }
   }
+  // Route lanterns make the important streets legible by day and form light trails at dusk.
+  const routeLampGlow=new THREE.MeshStandardMaterial({color:0xffd59b,emissive:0xe07d3c,emissiveIntensity:1.15,roughness:.34});
+  function routeLamp(x,z){box(scene,.18,5.6,.18,x,2.8,z,dark,false);box(scene,1.18,.16,1.18,x,5.55,z,dark,false);const glow=box(scene,.58,.78,.58,x,5.05,z,routeLampGlow,false);world.lamps.push(glow);}
+  for(let z=-110;z<=136;z+=27){routeLamp(21,z);routeLamp(41,z);}
+  for(let x=-140;x<=140;x+=27){routeLamp(x,43);routeLamp(x,61);}
   // Civic infrastructure breaks up the repeating city grid: covered market stalls,
   // signal flags and curb islands give the traversal routes a believable function.
   const canvasMat=createMat(0x8d6356),flagMat=createMat(0xe2b779),iron=createMat(0x304654);
