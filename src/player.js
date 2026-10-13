@@ -4,59 +4,103 @@ const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 const mix=(a,b,t)=>a+(b-a)*t;
 const mat=(color,metalness=0,roughness=.7)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
-const frameMat=mat(0x243540,.25),armorMat=mat(0x607581,.4),leatherMat=mat(0x40383c,.12),bronzeMat=mat(0xb79d73,.67,.36),faceMat=mat(0xe7b99b),scarfMat=mat(0xd48e6a),glowMat=new THREE.MeshBasicMaterial({color:0x9ceaf9,transparent:true,opacity:.72});
-const box=(p,w,h,d,x,y,z,m)=>{let a=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);a.position.set(x,y,z);a.castShadow=true;p.add(a);return a;};
-function mesh(p,g,m,x,y,z){let a=new THREE.Mesh(g,m);a.position.set(x,y,z);a.castShadow=true;p.add(a);return a;}
+const jacket=mat(0xa87b4e,0,.91), shirt=mat(0xe4d9be,0,.95), pants=mat(0xede2cb,0,.94);
+const leather=mat(0x3d261c,0,.83), leatherLite=mat(0x77503a,0,.85), boot=mat(0x32251f,0,.76);
+const green=mat(0x284c3c,0,.94),greenDark=mat(0x193a30,0,.95),steel=mat(0x86939a,.72,.3),brightSteel=mat(0xc5d2d4,.68,.27);
+const brass=mat(0xb99a62,.64,.35),skin=mat(0xe1aa88,0,.86),hair=mat(0x29201c,0,.95),white=mat(0xe5e6d8,0,.9);
+const box=(p,w,h,d,x,y,z,m)=>{const a=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);a.position.set(x,y,z);a.castShadow=true;p.add(a);return a;};
+const mesh=(p,g,m,x,y,z)=>{const a=new THREE.Mesh(g,m);a.position.set(x,y,z);a.castShadow=true;p.add(a);return a;};
+function rod(p,a,b,r,m){const v=new THREE.Vector3(...a),w=new THREE.Vector3(...b),delta=w.clone().sub(v);
+const o=mesh(p,new THREE.CylinderGeometry(r,r,delta.length(),7),m,...v.clone().add(w).multiplyScalar(.5).toArray());o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());return o;}
+function capePanel(parent,side){
+  const shape=new THREE.Shape();shape.moveTo(0,0);shape.lineTo(side*.50,-.08);shape.lineTo(side*.77,-.92);
+  shape.quadraticCurveTo(side*.53,-1.17,side*.26,-1.04);shape.lineTo(0,-1.02);shape.closePath();
+  const g=new THREE.ShapeGeometry(shape,12);const m=green.clone();m.side=THREE.DoubleSide;
+  const o=new THREE.Mesh(g,m);o.rotation.x=-.19;o.position.set(0,1.08,.40);o.castShadow=true;parent.add(o);return o;
+}
 function avatar(scene){
   const root=new THREE.Group();scene.add(root);
   const tilt=new THREE.Group();root.add(tilt);
-  const coat=box(tilt,.89,1.2,.49,0,.46,.08,frameMat);
-  box(tilt,.92,.09,.55,0,.84,-.02,bronzeMat);
-  box(tilt,.3,.65,.67,0,.28,.07,leatherMat);
-  box(tilt,.78,.15,.58,0,-.03,.08,bronzeMat);
-  const collar=mesh(tilt,new THREE.CylinderGeometry(.34,.43,.25,8),scarfMat,0,1.17,-.04);
-  const head=mesh(tilt,new THREE.SphereGeometry(.31,14,12),faceMat,0,1.47,-.01);
-  head.scale.set(1,.99,.86);
-  const helmet=mesh(tilt,new THREE.SphereGeometry(.33,14,8,0,Math.PI*2,0,Math.PI/2),frameMat,0,1.53,.01);
-  box(tilt,.8,.12,.25,0,1.57,-.22,frameMat);
-  box(tilt,.22,.12,.06,-.12,1.42,-.275,leatherMat);box(tilt,.22,.12,.06,.12,1.42,-.275,leatherMat);
-  // Two compact independent grappling gas canisters and a turbine pack.
-  for(const sign of [-1,1]){
-    const can=mesh(tilt,new THREE.CylinderGeometry(.18,.18,.87,10),armorMat,sign*.32,.47,.46);
-    can.rotation.z=sign*.14;
-    box(tilt,.31,.11,.37,sign*.32,.85,.44,bronzeMat);
-    mesh(tilt,new THREE.CylinderGeometry(.10,.14,.23,8),leatherMat,sign*.33,-.03,.54);
+  // Cropped tan jacket over a pale undershirt, fitted military trousers.
+  box(tilt,.76,.93,.45,0,.56,0,shirt);
+  box(tilt,.39,.87,.48,-.20,.58,-.035,jacket);box(tilt,.39,.87,.48,.20,.58,-.035,jacket);
+  box(tilt,.10,.76,.51,0,.61,-.053,shirt);
+  box(tilt,.83,.15,.54,0,.16,.035,leather);
+  box(tilt,.23,.13,.09,0,.16,-.27,brass);
+  box(tilt,.78,.25,.44,0,-.12,0,pants);
+  // Shoulder, chest and cross-waist straps; external so they remain readable in motion.
+  rod(tilt,[-.34,1,-.27],[.19,.14,-.28],.044,leather);
+  rod(tilt,[.34,1,-.27],[-.19,.14,-.28],.044,leather);
+  rod(tilt,[-.33,.92,.25],[.25,.18,.30],.042,leatherLite);
+  rod(tilt,[.33,.92,.25],[-.25,.18,.30],.042,leatherLite);
+  box(tilt,.23,.10,.04,-.13,.58,-.309,brass);box(tilt,.23,.10,.04,.13,.58,-.309,brass);
+  // Head and short layered windswept hair (face points toward local -Z).
+  mesh(tilt,new THREE.CylinderGeometry(.19,.25,.20,12),skin,0,1.16,0);
+  const head=mesh(tilt,new THREE.SphereGeometry(.275,18,14),skin,0,1.49,-.018);head.scale.set(.95,1.06,.87);
+  const hairCap=mesh(tilt,new THREE.SphereGeometry(.285,18,12,0,Math.PI*2,0,Math.PI*.60),hair,0,1.59,-.007);
+  for(let k=0;k<7;k++){const t=(k-3)/3;const strand=mesh(tilt,new THREE.ConeGeometry(.083,.25,5),hair,t*.205,1.63,-.205);strand.rotation.z=.3+t*.45;strand.rotation.x=-.27;}
+  for(const s of [-1,1]){
+    mesh(tilt,new THREE.SphereGeometry(.025,7,5),leather,s*.108,1.50,-.252);
+    rod(tilt,[s*.19,1.30,-.18],[s*.20,1.55,-.13],.013,hair);
   }
-  box(tilt,.7,.45,.25,0,.25,.44,leatherMat);
+  // Shoulder cloak with independently moving panels and custom twin-wing back emblem.
+  const capePivot=new THREE.Group();capePivot.position.set(0,0,0);tilt.add(capePivot);
+  const capeL=capePanel(capePivot,-1),capeR=capePanel(capePivot,1);
+  box(tilt,1.06,.13,.60,0,1.08,.16,greenDark);
+  const emblem=new THREE.Group();emblem.position.set(0,.81,.475);capePivot.add(emblem);
+  for(const s of [-1,1]){
+    for(let k=0;k<4;k++){
+      const feather=box(emblem,.10,.30-k*.035,.014,s*(.08+k*.09),-k*.07,0,k%2?white:brightSteel);
+      feather.rotation.z=s*(.36+k*.11);
+    }
+  }
+  // Angular waist OD propulsion box and hip-mounted gas cylinders / cable reels.
+  box(tilt,.71,.40,.27,0,.24,.47,steel);
+  for(const s of [-1,1]){
+    box(tilt,.25,.22,.32,s*.31,.24,.48,leather);
+    const can=mesh(tilt,new THREE.CylinderGeometry(.13,.13,.76,12),steel,s*.55,-.13,.19);
+    can.rotation.z=s*.14;
+    box(tilt,.36,.13,.33,s*.55,.23,.18,brass);
+    mesh(tilt,new THREE.CylinderGeometry(.16,.16,.06,16),brightSteel,s*.70,.04,.22).rotation.z=Math.PI/2;
+    mesh(tilt,new THREE.CylinderGeometry(.068,.068,.07,10),leather,s*.74,.04,.22).rotation.z=Math.PI/2;
+    // Retracted replacement blade and sheath along the hip.
+    box(tilt,.10,.79,.17,s*.70,-.32,-.13,steel);
+    box(tilt,.14,.13,.24,s*.70,.08,-.13,leather);
+    rod(tilt,[s*.29,.49,-.20],[s*.58,-.21,-.19],.036,leatherLite);
+  }
   const arms=[],legs=[];
-  for(const sign of [-1,1]){
-    const a=new THREE.Group();a.position.set(sign*.57,.92,0);tilt.add(a);arms.push(a);
-    box(a,.31,.68,.31,sign*.045,-.29,0,armorMat);
-    box(a,.38,.22,.35,sign*.045,-.61,-.02,leatherMat);
-    const claw=box(a,.27,.36,.64,sign*.05,-.74,-.31,bronzeMat);
-    box(a,.19,.14,.25,sign*.05,-.74,-.7,frameMat);
-    const l=new THREE.Group();l.position.set(sign*.25,-.23,.09);tilt.add(l);legs.push(l);
-    box(l,.35,.79,.38,0,-.31,0,leatherMat);
-    box(l,.38,.52,.4,0,-.89,-.01,armorMat);
-    box(l,.41,.19,.69,0,-1.1,-.16,frameMat);
-    // Winglike cape panel is original to this prototype.
-    const wing=box(tilt,.43,.95,.07,sign*.34,-.10,.36,frameMat);wing.rotation.z=sign*.13;
+  for(const s of [-1,1]){
+    const a=new THREE.Group();a.position.set(s*.51,.91,0);tilt.add(a);arms.push(a);
+    box(a,.30,.54,.34,s*.02,-.25,0,jacket);
+    box(a,.28,.19,.32,s*.02,-.58,0,shirt);
+    box(a,.29,.20,.33,s*.02,-.76,0,leather);
+    box(a,.19,.23,.26,s*.02,-.86,-.03,skin);
+    const handle=box(a,.13,.35,.14,s*.02,-.93,-.22,leather);handle.rotation.x=-.25;
+    box(a,.09,.08,.28,s*.02,-.75,-.28,brass);
+    const l=new THREE.Group();l.position.set(s*.22,-.23,0);tilt.add(l);legs.push(l);
+    box(l,.34,.79,.35,0,-.33,0,pants);
+    box(l,.37,.52,.37,0,-.88,0,boot);
+    box(l,.39,.17,.63,0,-1.13,-.15,boot);
+    box(l,.40,.075,.42,0,-.66,0,leather);
+    for(const y of [-.20,-.47]){const strap=box(l,.39,.055,.39,0,y,0,leather);strap.rotation.z=s*.055;}
+    box(l,.10,.085,.05,s*.18,-.45,-.20,brass);
   }
-  // Ground shadow decal, constant size to make landings easier.
   const shadow=new THREE.Mesh(new THREE.CircleGeometry(.85,20),new THREE.MeshBasicMaterial({color:0x111b23,transparent:true,opacity:.22,depthWrite:false}));
   shadow.rotation.x=-Math.PI/2;scene.add(shadow);
-  // Twin glowing wire lines; each buffer updates without allocating geometries each frame.
   const ropeLines=[],tips=[];
   for(const s of [-1,1]){
     const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
-    const line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:s<0?0x7cdcf2:0xffb478,transparent:true,opacity:.96,depthTest:true}));
+    const line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:s<0?0xc6d9df:0xbfcad1,transparent:true,opacity:.96}));
     line.visible=false;line.frustumCulled=false;scene.add(line);ropeLines.push(line);
-    const tip=mesh(scene,new THREE.IcosahedronGeometry(.42,1),new THREE.MeshBasicMaterial({color:s<0?0xa1f0ff:0xffd09d}));tip.visible=false;tips.push(tip);
+    const tip=mesh(scene,new THREE.IcosahedronGeometry(.3,1),brightSteel);tip.visible=false;tips.push(tip);
   }
-  const jetMat=new THREE.MeshBasicMaterial({color:0x93dfff,transparent:true,opacity:.58,depthWrite:false,blending:THREE.AdditiveBlending});
   const jets=[];
-  for(let i=0;i<2;i++){let jet=new THREE.Mesh(new THREE.ConeGeometry(.24,2.3,9),jetMat.clone());jet.rotation.x=Math.PI/2;jet.visible=false;tilt.add(jet);jet.position.set(i?-.32:.32,.15,.9);jets.push(jet);}
-  return {root,tilt,arms,legs,shadow,ropeLines,tips,jets};
+  for(let i=0;i<2;i++){
+    const m=new THREE.MeshBasicMaterial({color:0x98ddf3,transparent:true,opacity:.50,depthWrite:false,blending:THREE.AdditiveBlending});
+    const jet=new THREE.Mesh(new THREE.ConeGeometry(.19,1.7,9),m);
+    jet.rotation.x=Math.PI/2;jet.visible=false;tilt.add(jet);jet.position.set(i?-.48:.48,.05,.52);jets.push(jet);
+  }
+  return {root,tilt,arms,legs,capeL,capeR,shadow,ropeLines,tips,jets};
 }
 export function createPlayer(scene,world,camera){
   const model=avatar(scene);
@@ -181,6 +225,11 @@ export function createPlayer(scene,world,camera){
     const sideVel=state.velocity.dot(right);
     state.bank=mix(state.bank,clamp(-sideVel/60,-.5,.5),1-Math.exp(-dt*4.3));
     model.tilt.rotation.z=state.bank;
+    // Flutter cape in proportion to aerodynamic velocity, without touching physics.
+    model.capeL.rotation.x=mix(model.capeL.rotation.x,clamp(-state.speed/105,-.66,-.06),1-Math.exp(-dt*5));
+    model.capeR.rotation.x=mix(model.capeR.rotation.x,clamp(-state.speed/105,-.66,-.06),1-Math.exp(-dt*5));
+    model.capeL.rotation.z=Math.sin(time*6)*.045;
+    model.capeR.rotation.z=-Math.sin(time*6+.6)*.045;
     model.tilt.rotation.x=mix(model.tilt.rotation.x,state.grounded?0:clamp(state.velocity.y/110-.22,-.65,.38),1-Math.exp(-dt*5));
     const walk=state.grounded?Math.sin(time*flatSpeed*.92)*clamp(flatSpeed/9,0,1):.28;
     model.legs[0].rotation.x=walk*.72+(state.grounded?0:-.39);
