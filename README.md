@@ -1,4 +1,4 @@
-# AETHERLINE — Skyline Trials
+# JOE TITAN — Skyline Trials
 
 An **original playable desktop-browser 3D aerial traversal prototype**, inspired by the genre of dual-grappling movement games. Original code, geometry, procedural textures, city design and character. No source code or assets copied from the reference game.
 
@@ -54,7 +54,7 @@ Upload the `dist/` folder. Static source also works directly on a static web hos
 
 Use the left/right anchors independently or together. Hooks raycast against real building geometry and gracefully assist toward nearby roof attachment points when aimed at open sky. Boost with gas while tethered for rapid acceleration. Gas regenerates on landing. Clear the six luminous signal beacons as quickly as possible; personal-best times are saved locally.
 
-## Build 0.4 — combat, traversal and exploration update
+## Build 0.5 — JOE TITAN rebrand and mobile flight update
 
 - **Free flight practice:** enter directly from the title screen, explore without a timer, then start the timed course from the HUD. Restarting practice preserves the practice mode.
 - **Navigation:** a city minimap displays your position, heading, course route and beacon progress. The timed course also has a distance marker that follows the next beacon or points toward it at the screen edge.
@@ -77,7 +77,7 @@ The verification command checks module syntax, HUD IDs and actual movement/colli
 
 Six original **Riftborn** giants roam the city as Wanderers, Runners and Bruisers. They patrol their districts, notice nearby pilots, pursue, strike, stagger, and can be defeated by aiming a blade strike at their glowing weak point. The tactical map marks their positions and shows active pursuers in bright red.
 
-Nine original, temporary **Vanguard Aspects** are available with `1–9`, then `X`: Skyrend, Bastion, Cinder, Tempest, Warden, Echo, Breaker, Harrier and Sovereign. Their gameplay effects cover aerial burst, armor, pulse damage, gas recovery, health recovery, decoy distraction, kinetic impact, cable mastery and enemy suppression. They are original AETHERLINE forms rather than recreations of characters or forms from another series.
+Nine original, temporary **Vanguard Aspects** are available with `1–9`, then `X`: Skyrend, Bastion, Cinder, Tempest, Warden, Echo, Breaker, Harrier and Sovereign. Their gameplay effects cover aerial burst, armor, pulse damage, gas recovery, health recovery, decoy distraction, kinetic impact, cable mastery and enemy suppression. They are original JOE TITAN forms rather than recreations of characters or forms from another series.
 
 ## What's included
 
@@ -93,6 +93,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram, implementation de
 
 ## Status and limitations
 
-This is **playable prototype v0.4**, not a complete game. It now includes procedural roaming enemies and a compact combat loop, but does not yet have authored skeletal character animation, mission scripting, narrative, multiplayer, navigation meshes, soundtrack, advanced postprocessing or smartphone control. Rope dynamics are a compact custom physics solver rather than Rapier. Physics collision with roof planes is simplified, especially for pitched roofs; small props and towers do not yet have accurate collision. Best experienced on a desktop/laptop using a hardware-accelerated Chromium/Firefox/Edge browser.
+This is **playable prototype v0.5**, not a complete game. It includes procedural roaming enemies, a compact combat loop, responsive landscape mobile controls with dual virtual joysticks, and the JOE TITAN rebrand. It does not yet have authored skeletal character animation, mission scripting, narrative, multiplayer, navigation meshes, soundtrack or advanced postprocessing. Rope dynamics are a compact custom physics solver rather than Rapier. Physics collision with roof planes is simplified, especially for pitched roofs; small props and towers do not yet have accurate collision. Best experienced in a hardware-accelerated Chromium/Firefox/Edge browser.
 
 No affiliation with Attack on Titan, the reference game's developers, publishers, or any other game IP.

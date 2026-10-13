@@ -1,4 +1,4 @@
-# AETHERLINE prototype — technical architecture
+# JOE TITAN prototype — technical architecture
 
 ## Runtime
 

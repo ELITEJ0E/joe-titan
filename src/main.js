@@ -14,7 +14,7 @@ let renderer,scene,camera,world,player,navigation,enemies,aspectState;
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
 let hadPointerLock=false,practice=false,debugVisible=false,lastRecovery=0;
 const TOTAL=6;
-try{best=Number(localStorage.getItem('aetherline-best'))||null;}catch{}
+try{best=Number(localStorage.getItem('joe-titan-best')||localStorage.getItem('aetherline-best'))||null;}catch{}
 const formatTime=(t)=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}.${String(Math.floor((t%1)*100)).padStart(2,'0')}`;
 $('bestTime').textContent=best?formatTime(best):'--:--.--';
 function showToast(message){toast.textContent=message;toast.classList.add('show');toastUntil=performance.now()/1000+2.4;}
@@ -81,7 +81,7 @@ function savePhoto(){
   canvas.toBlob((blob)=>{
     if(!blob){showToast('PHOTO COULD NOT BE SAVED');return;}
     const url=URL.createObjectURL(blob),link=document.createElement('a');
-    link.href=url;link.download='AETHERLINE-flight.png';link.click();
+    link.href=url;link.download='joe-titan-flight.png';link.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);showToast('FLIGHT PHOTO SAVED');
   },'image/png');
 }
@@ -185,7 +185,7 @@ function attachEvents(){
 function completeCourse(){
   finished=true;clearInputs();mobileControls?.classList.add('hidden');hud.classList.add('hidden');complete.classList.remove('hidden');$('finalTime').textContent=formatTime(elapsed);
   let record=!best||elapsed<best;
-  if(record){best=elapsed;try{localStorage.setItem('aetherline-best',String(best));}catch{}$('bestTime').textContent=formatTime(best);}
+  if(record){best=elapsed;try{localStorage.setItem('joe-titan-best',String(best));}catch{}$('bestTime').textContent=formatTime(best);}
   $('recordMessage').textContent=record?'NEW PERSONAL BEST — CERTIFICATION RECORDED':'PERSONAL BEST — '+formatTime(best);
   if(document.pointerLockElement===canvas)document.exitPointerLock();playBeep('beacon');
 }
