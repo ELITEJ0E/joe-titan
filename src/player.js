@@ -297,7 +297,7 @@ export function createPlayer(scene,world,camera){
     let obstructed=false;
     if(!state.firstPerson){
       const delta=desired.clone().sub(aim),dist=delta.length();let hit=world.grappleRay(aim,delta.clone().normalize(),dist);
-      if(hit){const closer=Math.max(.35,hit.distanceTo(aim)-.65);desired.copy(aim).addScaledVector(delta.normalize(),closer);obstructed=true;}
+      if(hit&&hit.distanceTo(aim)<dist){const closer=Math.max(.35,hit.distanceTo(aim)-.65);desired.copy(aim).addScaledVector(delta.normalize(),closer);obstructed=true;}
     }
     desired.y=Math.max(.35,desired.y);
     if(snap||!finiteVector(camera.position))camera.position.copy(desired);
