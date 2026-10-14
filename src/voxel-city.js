@@ -96,7 +96,7 @@ export function createVoxelWorld(scene){
   const atmosphereValues={...ATMOSPHERE_DEFAULTS};
   let atmosphere=sampleCinematicAtmosphere(atmosphereValues);
   scene.background=atmosphere.horizon.clone();
-  scene.fog=new THREE.FogExp2(atmosphere.fog,.0011);
+  scene.fog=new THREE.FogExp2(atmosphere.fog,.00135*atmosphere.fogStrength);
   const skyLayer=addAtmosphere(scene,atmosphere);
   const hemisphere=new THREE.HemisphereLight(0xffe8ce,0x5c675f,atmosphere.ambient);
   scene.add(hemisphere);
