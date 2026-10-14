@@ -432,6 +432,16 @@ export function createVoxelWorld(scene){
       b.group.children[1].rotation.y+=dt*1.6;
     });
   };
+  // Fallback world keeps the same game-wide graphics setting without adding
+  // extra scene geometry or changing the voxel/ODM collision model.
+  world.setVisualQuality=(quality)=>{
+    const cinematic=quality==='cinematic';
+    sunlight.intensity=cinematic?2.55:2.35;
+    scene.fog.density=cinematic?.00175:.00135;
+    sunlight.shadow.mapSize.set(cinematic?2048:1024,cinematic?2048:1024);
+    if(sunlight.shadow.map)sunlight.shadow.map.dispose();
+    sunlight.shadow.map=null;sunlight.shadow.needsUpdate=true;
+  };
   world.stats={houses:houseCount,instances:voxelCount,drawMeshes, ...world.referenceStats};
   world.setBeaconActive(0);
   return world;
