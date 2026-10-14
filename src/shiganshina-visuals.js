@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {ATMOSPHERE_DEFAULTS,sampleCinematicAtmosphere,createSkyUniforms,updateSkyUniforms,CINEMATIC_SKY_VERTEX,CINEMATIC_SKY_FRAGMENT} from './cinematic-atmosphere.js';
 // Original Minecraft-inspired pixel atlas and physically evocative (not PBR) lighting.
 // No third-party shader-pack or Minecraft textures are included.
 export const VISUAL_PRESETS=Object.freeze({
@@ -69,8 +70,8 @@ export function createShiganshinaAtlas(colors){
     if(t===27){ctx.fillStyle='rgba(255,244,193,.75)';ctx.fillRect(x+5,y+5,22,22);}
   }
   const tex=new THREE.CanvasTexture(canvas);
-  tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestMipmapNearestFilter;
-  tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=2;
+  tex.magFilter=tex.minFilter=THREE.NearestFilter;
+  tex.generateMipmaps=false;tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=1;
   return tex;
 }
 const vs=`
@@ -79,16 +80,23 @@ attribute float aShadow;
 attribute float aAO;
 varying float vTile;varying float vShadow;varying float vAO;
 varying vec2 vUV;varying vec3 vWorld;varying vec3 vNormal;
+uniform float uTime;
 void main(){
  vTile=aTile;vShadow=aShadow;vAO=aAO;vUV=uv;
  vec4 w=modelMatrix*vec4(position,1.);
+ // Tiny broad water displacement. Keep this in the vertex shader so the
+ // surface silhouette and specular highlights follow the same small wave.
+ if(aTile>16.5&&aTile<17.5&&normal.y>.5){
+  w.y+=.045*sin(w.x*.32+uTime*1.4)*cos(w.z*.38-uTime*1.0);
+ }
  vWorld=w.xyz;vNormal=normalize(mat3(modelMatrix)*normal);
  gl_Position=projectionMatrix*viewMatrix*w;
 }`;
 const fs=`
 uniform sampler2D uAtlas;
-uniform vec3 uSunDir,uSunTint,uSkyTint,uFogColor;
+uniform vec3 uSunDir,uSunTint,uSkyTint,uFogColor,uHorizonTint,uZenithTint;
 uniform float uTime,uFogNear,uFogFar,uCloudShadow,uEdgeAO,uSunShadow;
+uniform float uSunStrength,uFogStrength,uWetness;
 varying float vTile;varying float vShadow;varying float vAO;
 varying vec2 vUV;varying vec3 vWorld;varying vec3 vNormal;
 void main(){
@@ -104,6 +112,13 @@ void main(){
  float bakedSun=mix(1.0,clamp(vShadow,.28,1.0),uSunShadow);
  vec3 lit=base*(uSkyTint*(.56+max(n.y,0.)*.20)+uSunTint*sun*bakedSun*.96);
  lit*=mix(1.0,clamp(vAO,.52,1.0),.87);
+ // Very weak microfacet-like highlight for damp stone/roofs, without
+ // screen-space reflections or blurring the crisp 32px atlas.
+ vec3 viewer=normalize(cameraPosition-vWorld);
+ vec3 h=normalize(viewer+uSunDir);
+ float gloss=pow(max(dot(n,h),0.0),32.0);
+ float porous=step(0.5,vTile)*(.82+step(7.5,vTile)*.18);
+ lit+=uSunTint*gloss*uWetness*porous*.11;
  if(n.y<-.5)lit*=.62;
  // Screen-space AO is too costly in fast ODM flight. Approximate block seams.
  vec2 edges=min(uv,1.-uv);
@@ -117,9 +132,13 @@ void main(){
    lit=mix(lit,vec3(.40,.67,.84),.11+fresnel*.26);
  }else if(vTile>16.5&&vTile<17.5){
    float wave=sin(vWorld.x*.48+uTime*1.35)*sin(vWorld.z*.37-uTime*1.15);
-   float fresnel=pow(1.-abs(dot(n,normalize(cameraPosition-vWorld))),2.3);
-   lit=mix(lit,vec3(.34,.67,.76),.13+fresnel*.31);
-   lit+=vec3(.09,.14,.12)*max(0.,wave)*sun;
+   float fresnel=pow(1.-clamp(abs(dot(n,viewer)),0.,1.),4.);
+   float spec=pow(max(dot(reflect(-uSunDir,n),viewer),0.),72.);
+   vec3 reflection=mix(uHorizonTint,uZenithTint,clamp(reflect(-viewer,n).y*.5+.5,0.,1.));
+   vec3 shallow=vec3(.21,.46,.53);
+   lit=mix(lit,shallow,.28);
+   lit=mix(lit,reflection,.18+fresnel*.56);
+   lit+=uSunTint*(spec*.34+max(0.,wave)*sun*.018);
  }else if(vTile>26.5&&vTile<27.5){
    lit+=base*vec3(.80,.46,.18);
  }
@@ -128,58 +147,48 @@ void main(){
    lit*=1.-uCloudShadow*smoothstep(-.15,.65,cloud)*sun;
  }
  float range=length(cameraPosition-vWorld);
- float fog=smoothstep(uFogNear,uFogFar,range);
- fog*=1.+.21*exp(-max(vWorld.y-5.,0.)*.065);
- // Keep distant walls recognisable; the old dense pink fog erased geometry.
- lit=mix(lit,uFogColor,clamp(fog*.60,0.,.68));
- gl_FragColor=vec4(lit,1.);
- #include <tonemapping_fragment>
- #include <colorspace_fragment>
-}`;
-const skyVS=`varying vec3 vDir;
-void main(){vDir=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
-const skyFS=`
-uniform float uTime,uCloudOpacity;
-varying vec3 vDir;
-void main(){
- vec3 dir=normalize(vDir);
- float altitude=smoothstep(-.18,.75,dir.y);
- vec3 sky=mix(vec3(.77,.70,.69),vec3(.27,.53,.77),altitude);
- float facing=max(dot(dir,normalize(vec3(-.66,.69,-.30))),0.);
- sky+=vec3(1.,.51,.27)*pow(facing,22.)*.29;
- sky+=vec3(1.,.84,.53)*pow(facing,550.)*.78;
- if(uCloudOpacity>0.){
-  vec2 p=dir.xz/max(.16,dir.y+.45);
-  float drift=uTime*.0012;
-  float bands=sin(p.x*4.9+drift)*sin(p.y*4.-drift*.68)
-    +.35*sin(p.x*10.3-p.y*3.1+drift*1.3);
-  float cloud=smoothstep(.23,.69,bands)*smoothstep(-.1,.18,dir.y);
-  sky=mix(sky,vec3(.98,.81,.69),cloud*uCloudOpacity);
- }
- gl_FragColor=vec4(sky,1.);
+ float horizontal=exp(-max(vWorld.y-10.,0.)*.035);
+ float distanceFog=smoothstep(uFogNear,uFogFar,range);
+ // Height-aware atmospheric perspective: streets receive more haze, high
+ // rooftops remain readable at ODM speeds. Forward scattering is strongest
+ // when looking toward the same sun that illuminates moving characters.
+ float forwardScatter=pow(max(dot(normalize(vWorld-cameraPosition),uSunDir),0.),8.);
+ float fog=distanceFog*(.56+.23*horizontal)*uFogStrength;
+ vec3 mist=uFogColor+uSunTint*forwardScatter*.055*uSunStrength;
+ lit=mix(lit,mist,clamp(fog,0.,.75));
+ float alpha=vTile>16.5&&vTile<17.5?.83:1.;
+ gl_FragColor=vec4(lit,alpha);
  #include <tonemapping_fragment>
  #include <colorspace_fragment>
 }`;
 export function createShiganshinaVisuals(scene,colors,mode='performance'){
  const atlas=createShiganshinaAtlas(colors);
- const sunDir=new THREE.Vector3(-.66,.69,-.30).normalize();
+ const state={...ATMOSPHERE_DEFAULTS};
+ let sample=sampleCinematicAtmosphere(state);
+ const sunDir=sample.sunDirection.clone();
  const uniforms={
    uAtlas:{value:atlas},uSunDir:{value:sunDir},
    uSunTint:{value:new THREE.Color(0xffd0a1)},uSkyTint:{value:new THREE.Color(0xbad3f0)},
-   uFogColor:{value:new THREE.Color(0xbac9d5)},uTime:{value:0},
+   uFogColor:{value:sample.fog.clone()},uTime:{value:0},
+   uHorizonTint:{value:sample.horizon.clone()},uZenithTint:{value:sample.zenith.clone()},
+   uSunStrength:{value:sample.sunStrength},uFogStrength:{value:sample.fogStrength},uWetness:{value:sample.wetness},
    uFogNear:{value:125},uFogFar:{value:390},uCloudShadow:{value:0},uEdgeAO:{value:0},uSunShadow:{value:0}
  };
  const material=new THREE.ShaderMaterial({uniforms,vertexShader:vs,fragmentShader:fs,side:THREE.FrontSide,toneMapped:true});
- const skyUniforms={uTime:{value:0},uCloudOpacity:{value:.12}};
+ // Water-only quads use the SAME baked AO/atlas/sun/fog shader uniforms but
+ // draw separately to permit transparent Fresnel-tinted surfaces.
+ const waterMaterial=new THREE.ShaderMaterial({uniforms,vertexShader:vs,fragmentShader:fs,
+   side:THREE.FrontSide,transparent:true,depthWrite:false,toneMapped:true});
+ const skyUniforms=createSkyUniforms(sample);
  const sky=new THREE.Mesh(new THREE.SphereGeometry(1200,28,18),
-   new THREE.ShaderMaterial({uniforms:skyUniforms,vertexShader:skyVS,fragmentShader:skyFS,
+   new THREE.ShaderMaterial({uniforms:skyUniforms,vertexShader:CINEMATIC_SKY_VERTEX,fragmentShader:CINEMATIC_SKY_FRAGMENT,
      side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false,toneMapped:true}));
  sky.name='Shiganshina Golden Sky';sky.frustumCulled=false;sky.renderOrder=-1000;
  sky.onBeforeRender=(_r,_s,camera)=>{sky.position.copy(camera.position);sky.updateMatrixWorld();};
  scene.add(sky);
- const ambient=new THREE.HemisphereLight(0xf4e8d3,0x5c7695,1.75);
+ const ambient=new THREE.HemisphereLight(0xf4e8d3,0x5c7695,sample.ambient);
  scene.add(ambient);
- const sun=new THREE.DirectionalLight(0xffd2a8,2.45);
+ const sun=new THREE.DirectionalLight(sample.sunColor,sample.sunlight);
  sun.position.copy(sunDir).multiplyScalar(220);
  sun.castShadow=true;
  sun.shadow.camera.left=-130;sun.shadow.camera.right=130;
@@ -187,8 +196,8 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
  sun.shadow.camera.near=1;sun.shadow.camera.far=480;
  sun.shadow.bias=-.00025;sun.shadow.normalBias=.045;
  scene.add(sun);
- scene.background=new THREE.Color(0xaec3d6);
- scene.fog=new THREE.Fog(0xbac9d5,125,418);
+ scene.background=sample.horizon.clone();
+ scene.fog=new THREE.Fog(sample.fog,125,418);
  let currentPreset=VISUAL_PRESETS[normaliseVisualQuality(mode)],menuClarity=false;
  function refreshFog(){
   // The custom voxel shader has its own fog uniforms; update BOTH that
@@ -206,12 +215,42 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
   currentPreset=p;refreshFog();
   uniforms.uCloudShadow.value=p.cloudShadow;uniforms.uEdgeAO.value=p.edgeAO;
   uniforms.uSunShadow.value=p.sunShadow;
-  skyUniforms.uCloudOpacity.value=p.bloom ? .34 : .12;
+  skyUniforms.uCloudOpacity.value=sample.clouds*(p.bloom?1.45:1);
   sun.shadow.mapSize.set(p.shadowMap,p.shadowMap);
   if(sun.shadow.map)sun.shadow.map.dispose();
   sun.shadow.map=null;sun.shadow.needsUpdate=true;
  }
- function animate(time){uniforms.uTime.value=time;skyUniforms.uTime.value=time;}
- setQuality(mode);
- return {material,setQuality,setMenuClarity,animate,sky,sun,ambient};
+ let lastSampleAt=-Infinity,needsSample=true;
+ function setAtmosphere(values={}){
+  for(const key of ['timeOfDay','stormAmount','steamAmount','weather']){
+   if(Object.hasOwn(values,key))state[key]=values[key];
+  }
+  needsSample=true;
+ }
+ function animate(time){
+  uniforms.uTime.value=time;skyUniforms.uTime.value=time;
+  // Update shared atmosphere uniforms 4 times/s, not per voxel face. The
+  // cheap sky cloud and water-wave phase still updates each render frame.
+  if(needsSample||time-lastSampleAt>=.25||time<lastSampleAt){
+   lastSampleAt=time;needsSample=false;
+   sample=sampleCinematicAtmosphere(state);
+   uniforms.uSunDir.value.copy(sample.sunDirection);
+   uniforms.uSunTint.value.copy(sample.sunColor);
+   uniforms.uSkyTint.value.copy(sample.skyFill);
+   uniforms.uHorizonTint.value.copy(sample.horizon);
+   uniforms.uZenithTint.value.copy(sample.zenith);
+   uniforms.uFogColor.value.copy(sample.fog);
+   uniforms.uSunStrength.value=sample.sunStrength;
+   uniforms.uFogStrength.value=sample.fogStrength;
+   uniforms.uWetness.value=sample.wetness;
+   updateSkyUniforms(skyUniforms,sample,time,currentPreset.bloom?1.45:1);
+   sun.position.copy(sample.sunDirection).multiplyScalar(220);
+   sun.color.copy(sample.sunColor);sun.intensity=sample.sunlight;
+   ambient.color.copy(sample.skyFill);ambient.intensity=sample.ambient;
+   scene.fog.color.copy(sample.fog);
+   scene.background.copy(sample.horizon);
+  }
+ }
+ setQuality(mode);animate(0);
+ return {material,waterMaterial,setQuality,setMenuClarity,setAtmosphere,animate,sky,sun,ambient,atlas};
 }
