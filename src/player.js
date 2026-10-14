@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
+import {applyODMMotor} from './odm-motor.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 
@@ -142,7 +143,10 @@ export function createPlayer(scene,world,camera){
     // A slack cable at attachment preserves momentum instead of snapping the body.
     state.hooks[index]={point,length:Math.max(7,dist),age:0};
     // Moderate initial take-up without an artificial high-speed teleport.
-    state.velocity.addScaledVector(point.clone().sub(state.position).normalize(),2.6);
+    state.velocity.addScaledVector(point.clone().sub(state.position).normalize(),3.8);
+    // A cable fired above ground lifts the pilot off the street rather than
+    // letting the walking controller pin the gear to the floor.
+    if(state.grounded&&point.y>state.position.y+3){state.velocity.y=Math.max(4.6,state.velocity.y);state.grounded=false;}
     return true;
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
@@ -178,9 +182,9 @@ export function createPlayer(scene,world,camera){
       if(input.jumpQueued){state.velocity.y=12.6;state.grounded=false;}
       state.gas=clamp(state.gas+dt*15,0,100);
     }else{
-      const acceleration=(activeHooks?19:13)*(state.aspect?.speed||1);
+      const acceleration=(activeHooks?16:13)*(state.aspect?.speed||1);
       state.velocity.addScaledVector(wish,dt*acceleration);
-      const drag=Math.exp(-dt*(activeHooks?.11:.25));state.velocity.x*=drag;state.velocity.z*=drag;
+      const drag=Math.exp(-dt*(activeHooks?.035:.21));state.velocity.x*=drag;state.velocity.z*=drag;
     }
     input.jumpQueued=false;
     if(input.keys.has('Space')&&!state.grounded&&state.gas>0){
@@ -194,29 +198,12 @@ export function createPlayer(scene,world,camera){
     if(input.keys.has('KeyG')&&state.velocity.y<0&&state.gas>0){
       state.velocity.y+=dt*34;state.gas=Math.max(0,state.gas-dt*6);
     }
-    // Grappling motor: tension + optional winch, never an unconditional teleport.
-    for(const hook of state.hooks){
-      if(!hook)continue;
-      hook.age+=dt;
-      if(reeling&&state.gas>0){
-        const other=state.hooks.find(candidate=>candidate&&candidate!==hook);
-        // Two cables must span their anchor separation; winching past this is impossible.
-        const minimum=other?Math.max(5.7,hook.point.distanceTo(other.point)-other.length+.5):5.7;
-        const next=Math.max(minimum,hook.length-dt*(18+Math.min(10,state.speed*.2))*(state.aspect?.reel||1));
-        if(next<hook.length){hook.length=next;state.gas=Math.max(0,state.gas-dt*2.3);}
-      }
-      const towards=hook.point.clone().sub(state.position),dist=towards.length(),unit=towards.multiplyScalar(1/(dist||1));
-      const excess=Math.max(0,dist-hook.length);
-      if(excess>0||reeling&&state.gas>0){
-        const radialSpeed=state.velocity.dot(unit);
-        const tension=excess*16+Math.max(0,-radialSpeed)*5;
-        const winch=reeling&&state.gas>0?20+Math.min(17,state.speed*.28):0;
-        // Split simultaneous winch force so two hooks don't double the launch
-        // acceleration. Both still constrain the same player trajectory.
-        const force=Math.min(110,tension+winch)/Math.sqrt(activeHooks||1);
-        state.velocity.addScaledVector(unit,force*dt);
-      }
-    }
+    // Attached cables reel automatically and supply responsive, bounded
+    // winch thrust; Shift accelerates the reel. No teleporting or speed reset.
+    state.gas=Math.max(0,state.gas-applyODMMotor(
+      state.position,state.velocity,state.hooks,dt,
+      {reeling,gas:state.gas,reelMultiplier:state.aspect?.reel||1}));
+    for(const hook of state.hooks)if(hook)hook.age+=dt;
     state.velocity.y-=25*dt;
     if(state.velocity.length()>77*(state.aspect?.speed||1))state.velocity.multiplyScalar(77*(state.aspect?.speed||1)/state.velocity.length());
     state.position.addScaledVector(state.velocity,dt);
