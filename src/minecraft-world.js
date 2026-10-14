@@ -182,6 +182,7 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   const animateMissions=world.animate;
   world.animate=(time,dt)=>{visuals.animate(time);animateMissions(time,dt);};
   world.setVisualQuality=visuals.setQuality;
+  world.setMenuClarity=visuals.setMenuClarity;
   world.stats={quads:asset.count,sectors,blocks:asset.voxel.length,lighting:'baked sun visibility and voxel corner AO'};
   return world;
 }
