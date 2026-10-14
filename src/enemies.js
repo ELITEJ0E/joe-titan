@@ -3,6 +3,7 @@ import {napeHit,segmentNapeHealth} from './reference-combat.js';
 import {createTitanProjectiles,BOULDER} from './titan-projectiles.js';
 import {severTitanArm,canTitanSwipe,titanSwipeDamage} from './titan-limbs.js';
 import {createVoxelTitanRig,animateVoxelTitanRig} from './titan-voxel-rig.js';
+import {chooseNapeArcTarget,BLADE_ARC} from './scout-blade-arc.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
@@ -221,6 +222,14 @@ export function createEnemyManager(scene,world){
     for(const enemy of candidates){const result=strikeWeakPoint(enemy,origin,direction,damage,9.5);if(result.hit)return result;}
     return {hit:false};
   }
+  function strikeArc(origin,direction,damage=22,{spin=false}={}){
+    // Select a reachable rear-facing nape within the physical sword sweep;
+    // the camera never automatically rotates or locks to a faraway target.
+    const candidate=chooseNapeArcTarget(simulation.enemies,origin,direction,{
+      reach:BLADE_ARC.reach,halfAngle:spin?BLADE_ARC.spinAngle:BLADE_ARC.slashAngle,world
+    });
+    return candidate?strikeWeakPoint(candidate.enemy,origin,candidate.direction,damage,BLADE_ARC.reach):{hit:false};
+  }
   function severArm(origin,direction,maxReach=8){
     // Approximate the two arm sockets on our procedural Titan rigs. This is
     // deliberately not a claim of exact reference skeletal hit geometry.
@@ -243,5 +252,5 @@ export function createEnemyManager(scene,world){
     return {kind:'none'};
   }
   function pulse(position,range,damage){let hits=0;for(const enemy of simulation.enemies){if(enemy.alive&&enemy.position.distanceTo(position)<=range){enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.9;if(enemy.health===0)enemy.alive=false;hits++;}}return hits;}
-  return {enemies:simulation.enemies,update,reset,strike,severArm,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
+  return {enemies:simulation.enemies,update,reset,strike,strikeArc,severArm,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
 }
