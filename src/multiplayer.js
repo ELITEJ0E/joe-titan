@@ -1,6 +1,7 @@
 import {Peer} from 'peerjs';
 import * as THREE from 'three';
 import {encodeScoutState} from './reference-combat.js';
+import {remoteTarget,smoothFactor} from './network-interpolation.js';
 
 const COLORS=['#8fe8ff','#f4bd88','#c6a7ff','#9be6a0'];
 const ICE_SERVERS=[
@@ -62,9 +63,10 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
       const encoded=message.state?.physics;
       const p=Array.isArray(encoded?.p)?encoded.p:null;
       const state={x:Number(p?.[0]??message.state?.x)||0,y:Number(p?.[1]??message.state?.y)||0,z:Number(p?.[2]??message.state?.z)||0,yaw:Number(message.state?.yaw)||0,aspect:String(message.state?.aspect||''),physics:encoded};
+      state.receivedAt=performance.now()/1000;
       remoteStates.set(connection.peer,state);
       let avatar=avatars.get(connection.peer);if(!avatar){avatar=makeRemoteAvatar(scene,avatars.size);avatars.set(connection.peer,avatar);}
-      avatar.visible=true;avatar.position.lerp(new THREE.Vector3(state.x,state.y,state.z),.35);avatar.rotation.y=state.yaw;
+      avatar.visible=true;avatar.rotation.y=state.yaw;
       avatar.userData.ring.rotation.z+=.035;avatar.userData.jetL.scale.y=state.aspect?1.25:1;avatar.userData.jetR.scale.y=state.aspect?1.25:1;
       onCount(connections.size);
     });
@@ -72,6 +74,14 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
     connection.on('close',close);connection.on('error',()=>{timedOut=true;setStatus('ERROR','ROOM CONNECTION FAILED · RETRY JOIN');close();});
   };
   return {
+    render(dt){
+      const now=performance.now()/1000;
+      for(const [id,state] of remoteStates){
+        const avatar=avatars.get(id);if(!avatar)continue;
+        const pos=remoteTarget(state,now-state.receivedAt);
+        avatar.position.lerp(new THREE.Vector3(...pos),smoothFactor(dt));
+      }
+    },
     start:ensurePeer,
     createRoom(){ensurePeer();return peerId;},
     joinRoom(room){ensurePeer();const code=String(room||'').replace(/\s+/g,'').trim();if(!code)return false;if(!peerId){pendingRoom=code;return true;}const connection=peer.connect(code,{reliable:true,serialization:'json'});bindConnection(connection);return true;},
