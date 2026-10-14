@@ -2,14 +2,14 @@
 // The player is a ~0.68m-wide capsule approximation whose origin is 1m
 // above the feet. Substeps prevent an ODM pilot tunneling through thin walls.
 export function slideVoxelHorizontal(position,previous,velocity,solid,{
-  radius=.32,maxStep=.3
+  radius=.3,maxStep=.3
 }={}){
   const dx=position.x-previous.x,dz=position.z-previous.z;
   const dy=position.y-previous.y;
   const steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dz),Math.abs(dy))/maxStep));
   let x=previous.x,z=previous.z,blockedX=false,blockedZ=false;
   const probe=(px,py,pz)=>{
-    for(const yOffset of [-.58,.25,1.18]){
+    for(const yOffset of [-.95,-.05,.77]){
       for(const ox of [-radius,radius]){
         for(const oz of [-radius,radius]){
           if(solid(px+ox,py+yOffset,pz+oz))return true;
