@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import {createWorld} from './world.js';
-import {installMedievalCity} from './imported-city.js';
+import {createVoxelWorld} from './voxel-city.js';
 import {createPlayer} from './player.js';
 import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
@@ -45,23 +44,15 @@ function playBeep(type='hook'){
 function init(){
   scene=new THREE.Scene();
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
-  renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.65));
+  renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.25));
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.14;
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.15,1600);
-  world=createWorld(scene);
-  // Snapshot only scenery before creating gameplay actors: removing the old map
-  // must never remove the player's character, ropes or transformation effects.
-  const oldWorldObjects=new Set(scene.children);
+  // Build the lightweight voxel city directly. No old procedural map or giant
+  // GLB is constructed, fetched, raycast, or temporarily allocated.
+  world=createVoxelWorld(scene);
   player=createPlayer(scene,world,camera);
-  installMedievalCity(scene,world,oldWorldObjects,{
-    onReady:({meshes,anchors,spawn})=>{
-      if(!started || paused)player.reset();
-      showToast(`MEDIEVAL CITY LOADED · ${meshes} MESHES · ${anchors} ANCHORS`);
-      console.info('Imported medieval city ready',meshes,anchors,spawn);
-    },
-    onError:(error)=>console.info('Using existing procedural city:',error.message)
-  });enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
+  enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
   camera.position.set(115,91,102);camera.lookAt(0,24,-10);
   window.addEventListener('resize',resize);
