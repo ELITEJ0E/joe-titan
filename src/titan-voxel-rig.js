@@ -59,7 +59,7 @@ export function createVoxelTitanRig(scene,enemy,{color=0x9b675c,height=15}={}){
   const mouth=new THREE.MeshLambertMaterial({color:0x542a2e});
   const gear=new THREE.MeshLambertMaterial({color:0x48443c});
   const armor=new THREE.MeshLambertMaterial({color:0x8a8275});
-  const hips=pivot(group,'hips',[0,.41,0]);
+  const hips=pivot(group,'hips',[0,.54,0]);
   cube(hips,'pelvis',[.25,.13,.165],[0,-.025,0],shade);
   const torso=pivot(hips,'torso',[0,.06,0]);
   cube(torso,'chest',[.29,.33,.19],[0,.135,0],skin);
@@ -118,7 +118,7 @@ export function createVoxelTitanRig(scene,enemy,{color=0x9b675c,height=15}={}){
   const alert=new THREE.Sprite(new THREE.SpriteMaterial({
     map:pixelMark('alert'),transparent:true,depthWrite:false,alphaTest:.1,opacity:.95
   }));
-  alert.name='alert marker';alert.position.set(0,1.11,0);alert.scale.set(.14,.14,1);
+  alert.name='alert marker';alert.position.set(0,1.28,0);alert.scale.set(.14,.14,1);
   alert.visible=false;group.add(alert);
   const shadow=new THREE.Mesh(new THREE.CircleGeometry(.30,12),
     new THREE.MeshBasicMaterial({color:0x171b20,transparent:true,opacity:.24,depthWrite:false}));
@@ -143,7 +143,7 @@ export function animateVoxelTitanRig(rig,enemy,dt,time=0){
   const phase=enemy.attackPhase||'idle';
   const windup=phase==='windup',lunge=phase==='lunge',strike=phase==='strike';
   const stagger=enemy.stagger>0;
-  rig.hips.position.y=.41+Math.abs(Math.sin(rig.gait))*.007*moving;
+  rig.hips.position.y=.54+Math.abs(Math.sin(rig.gait))*.007*moving;
   smoothVoxelJoint(rig.torso,breathing+(lunge?-.33:windup?.23:strike?-.29:0)+(stagger?.23:0),
     strike?.17:Math.sin(time*.65)*.035,walk*.085,dt,11);
   smoothVoxelJoint(rig.neck,windup?-.12:strike?.16:0,Math.sin(time*.8)*.13,0,dt,9);
