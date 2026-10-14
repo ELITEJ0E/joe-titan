@@ -196,7 +196,12 @@ function setupTouchButton(button){
     if(!started||paused||finished)return;
     button.classList.toggle('active',pressed);
     if(action==='jump'){if(pressed&&player.grounded)input.jumpQueued=true;return;}
+    if(player.grabbed&&(action==='attack'||action==='boost')){
+      if(pressed){const status=player.escapeGrab();showToast(status.active?'ESCAPE GRAB · '+status.remaining+' INPUTS':'GRAB BROKEN');}
+      return;
+    }
     if(action==='attack'){if(pressed)bladeStrike();return;}
+    if(action==='shoot'){if(pressed){const muzzle=player.position.clone().add(new THREE.Vector3(0,1.25,0));if(ranged?.fire(muzzle,player.viewDirection()))showToast('PISTOL · '+ranged.ammo+' SHOTS');}return;}
     if(action==='aspect'){if(pressed)activateSelectedAspect();return;}
     const key={leftCable:'KeyQ',rightCable:'KeyE',boost:'Space'}[action];
     if(key){
