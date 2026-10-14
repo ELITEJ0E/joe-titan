@@ -1,25 +1,29 @@
 import * as THREE from 'three';
+import {napeHit,segmentNapeHealth} from './reference-combat.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 const TYPES={
   wanderer:{name:'Wanderer',height:15,speed:3.2,health:100,color:0x9b675c},
   runner:{name:'Runner',height:12,speed:5.1,health:72,color:0xb88b73},
-  bruiser:{name:'Bruiser',height:20,speed:2.25,health:180,color:0x765659}
+  bruiser:{name:'Bruiser',height:20,speed:2.25,health:180,color:0x765659},
+  armored:{name:'Armored',height:19,speed:2.8,health:300,color:0xa69a7d,shifter:true},
+  beast:{name:'Beast',height:23,speed:3,health:300,color:0x7b6757,shifter:true},
+  colossus:{name:'Colossus',height:34,speed:1.5,health:400,color:0xb85d4f,shifter:true}
 };
 
 export function createEnemySimulation(spawns=[]){
   const enemies=spawns.map((spawn,index)=>{
     const type=TYPES[spawn.type]||TYPES.wanderer,position=V(...spawn.position);
     return {id:spawn.id||`riftborn-${index}`,type:spawn.type||'wanderer',height:type.height,maxHealth:type.health,health:type.health,
-      speed:type.speed,position,spawnPosition:position.clone(),patrol:V(...(spawn.patrol||spawn.position)),spawnPatrol:V(...(spawn.patrol||spawn.position)),forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0};
+      speed:type.speed,shifter:!!type.shifter,napeHP:segmentNapeHealth(type.health),armRight:0,armLeft:0,position,spawnPosition:position.clone(),patrol:V(...(spawn.patrol||spawn.position)),spawnPatrol:V(...(spawn.patrol||spawn.position)),forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0};
   });
-  function reset(){for(const enemy of enemies){enemy.position.copy(enemy.spawnPosition);enemy.patrol.copy(enemy.spawnPatrol);enemy.health=enemy.maxHealth;enemy.alive=true;enemy.state='patrol';enemy.attack=0;enemy.stagger=0;enemy.forward.set(0,0,-1);}}
+  function reset(){for(const enemy of enemies){enemy.position.copy(enemy.spawnPosition);enemy.patrol.copy(enemy.spawnPatrol);enemy.health=enemy.maxHealth;enemy.napeHP=segmentNapeHealth(enemy.maxHealth);enemy.armRight=enemy.armLeft=0;enemy.alive=true;enemy.state='patrol';enemy.attack=0;enemy.stagger=0;enemy.forward.set(0,0,-1);}}
   function update(dt,playerPosition,decoyPosition=null,slow=1){
     let damage=0;
     for(const enemy of enemies){
       if(!enemy.alive)continue;
-      enemy.attack=Math.max(0,enemy.attack-dt);enemy.stagger=Math.max(0,enemy.stagger-dt);
+      enemy.attack=Math.max(0,enemy.attack-dt);enemy.stagger=Math.max(0,enemy.stagger-dt);enemy.armRight=Math.max(0,enemy.armRight-dt);enemy.armLeft=Math.max(0,enemy.armLeft-dt);
       const target=decoyPosition||playerPosition,offset=target.clone().sub(enemy.position);offset.y=0;const distance=offset.length();
       if(enemy.stagger>0){enemy.state='stagger';continue;}
       if(distance<42)enemy.state='pursue';else if(enemy.state!=='patrol')enemy.state='return';
@@ -28,7 +32,7 @@ export function createEnemySimulation(spawns=[]){
       const targetDistance=direction.length();
       if(targetDistance>.5){direction.multiplyScalar(1/targetDistance);enemy.forward.lerp(direction,Math.min(1,dt*4)).normalize();}
       if(enemy.state==='pursue'&&distance<7){
-        enemy.state='strike';if(enemy.attack===0){enemy.attack=2.4;damage=12;}
+        enemy.state='strike';if(enemy.attack===0){enemy.attack=2.4;damage=enemy.type==='colossus'||enemy.type==='beast'?35:enemy.type==='runner'?18:enemy.type==='armored'?28:24;}
       }else if(targetDistance>.7){enemy.position.addScaledVector(enemy.forward,Math.min(targetDistance,enemy.speed*slow*dt));}
       enemy.position.x=clamp(enemy.position.x,-181,181);enemy.position.z=clamp(enemy.position.z,-181,181);
     }
@@ -48,6 +52,14 @@ export function strikeWeakPoint(enemy,origin,direction,damage=18,maxReach=Infini
   ray.multiplyScalar(1/(distance||1));
   const alignment=ray.dot(direction),closest=origin.clone().addScaledVector(direction,Math.max(0,point.clone().sub(origin).dot(direction)));
   if(alignment<.87||closest.distanceTo(point)>2.35)return {hit:false};
+  if(enemy.shifter){
+    const result=napeHit({hp:enemy.health,napeHP:enemy.napeHP,shifter:true,deep:damage>=35,
+      armor:enemy.type==='armored'&&enemy.stagger===0&&damage<44});
+    enemy.health=result.hp;enemy.napeHP=result.napeHP;
+    enemy.stagger=result.kind==='napecrack'?result.stagger:result.kind==='kill'?.9:.25;
+    if(result.kind==='kill')enemy.alive=false;
+    return {hit:true,point,defeated:!enemy.alive,kind:result.kind,enemy};
+  }
   enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.45;
   if(enemy.health===0)enemy.alive=false;
   return {hit:true,point,defeated:!enemy.alive,enemy};
@@ -67,7 +79,7 @@ export function createEnemyManager(scene,world){
   const simulation=createEnemySimulation([
     {type:'wanderer',position:[-72,0,-67],patrol:[-105,0,-91]}, {type:'runner',position:[75,0,-92],patrol:[110,0,-106]},
     {type:'bruiser',position:[-117,0,75],patrol:[-132,0,110]}, {type:'wanderer',position:[98,0,83],patrol:[127,0,116]},
-    {type:'runner',position:[-58,0,112],patrol:[-94,0,128]}, {type:'wanderer',position:[135,0,8],patrol:[153,0,29]}
+    {type:'beast',position:[-58,0,112],patrol:[-94,0,128]}, {type:'armored',position:[135,0,8],patrol:[153,0,29]}
   ]);
   simulation.enemies.forEach(enemy=>humanoid(scene,enemy));
   let slowTimer=0,decoyTimer=0,decoy=null;
