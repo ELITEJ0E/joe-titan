@@ -147,7 +147,10 @@ function bladeStrike(){
   const origin=player.position.clone().add(new THREE.Vector3(0,1.35,0));
   const result=enemies.strike(origin,player.viewDirection(),damage);
   if(result.hit)showToast(result.defeated?'RIFTBORN DISPERSED':'WEAK POINT STRIKE');
-  else showToast('BLADE MISSED · AIM FOR THE GLOWING NAPE');
+  else {
+    const limb=enemies.severArm(origin,player.viewDirection());
+    showToast(limb.kind==='limb'?'TITAN ARM SEVERED · ATTACK INTERRUPTED':'BLADE MISSED · AIM FOR THE NAPE OR ARMS');
+  }
 }
 function savePhoto(){
   if(graphics)graphics.render();else renderer.render(scene,camera);
