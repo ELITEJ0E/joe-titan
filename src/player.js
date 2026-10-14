@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
 import {applyODMMotor,applyReferenceAirDrag,ODM_TUNING} from './odm-motor.js';
 import {applyDirectionalGasBoost} from './odm-gas-propulsion.js';
-import {impactDamage} from './odm-impacts.js';
+import {evaluateODMCollision} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 
@@ -147,7 +147,8 @@ export function createPlayer(scene,world,camera){
   const formCore=new THREE.Mesh(new THREE.SphereGeometry(.34,12,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88}));formCore.position.y=2.7;form.add(formCore);form.visible=false;scene.add(form);
   const cameraAim=V(0,0,0);
   const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grabbed:false,grabEscape:0,grounded:true,
-    hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false};
+    hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false,
+    flightClock:0,lastGearAt:-Infinity,lastImpactAt:-Infinity,impactFeedback:0};
   camera.position.set(9,5,3);
   const heading=()=>V(-Math.sin(state.yaw),0,-Math.cos(state.yaw));
   const viewDirection=()=>V(-Math.sin(state.yaw)*Math.cos(state.pitch),Math.sin(state.pitch),-Math.cos(state.yaw)*Math.cos(state.pitch));
@@ -177,6 +178,7 @@ export function createPlayer(scene,world,camera){
   function reset(){
     state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.blades=8;state.grabbed=false;state.grabEscape=0;state.grounded=true;state.aspect=null;form.visible=false;
     state.yaw=0;state.pitch=-.07;state.distance=0;state.speed=0;state.bank=0;state.boost=false;
+    state.flightClock=0;state.lastGearAt=-Infinity;state.lastImpactAt=-Infinity;state.impactFeedback=0;
     release(0);release(1);model.root.position.copy(state.position);model.root.rotation.set(0,0,0);model.tilt.rotation.set(0,0,0);
     cameraAim.copy(state.position).add(V(0,.9,0));
     camera.position.copy(state.position).add(V(1.15,3.86,11.57));updateCamera(1,true);
@@ -194,6 +196,8 @@ export function createPlayer(scene,world,camera){
       input.jumpQueued=false;model.root.position.copy(state.position);
       return;
     }
+    state.flightClock+=dt;
+    state.impactFeedback=Math.max(0,state.impactFeedback-dt);
     const prev=state.position.clone();let forward=heading(),right=V(-forward.z,0,forward.x);
     let wish=V(0,0,0);
     if(input.keys.has('KeyW'))wish.add(forward);
@@ -203,6 +207,7 @@ export function createPlayer(scene,world,camera){
     if(wish.lengthSq()>0)wish.normalize();
     const reeling=input.keys.has('ShiftLeft')||input.keys.has('ShiftRight');
     const activeHooks=state.hooks.filter(Boolean).length;
+    if(activeHooks)state.lastGearAt=state.flightClock;
     const movingForward=wish.dot(forward)>0.01;
     if(state.grounded&&!activeHooks){
       const speedMultiplier=state.aspect?.speed||1;
@@ -250,11 +255,16 @@ export function createPlayer(scene,world,camera){
     // Symmetric dual-cable solve: preserve velocity along each cable tangent.
     solveTetherConstraints(state.position,state.velocity,state.hooks);
     state.grounded=world.resolveCollision(state.position,prev,state.velocity);
-    if(world.style==='minecraft-world'&&world.lastCollision){
-      const impact=world.lastCollision;
-      const damage=impactDamage(impact.wallSpeed,true)+impactDamage(impact.landingSpeed,false);
-      if(damage>0){
-        const reduced=damage*(1-(state.aspect?.armor||0));
+    if(world.lastCollision){
+      const collision=evaluateODMCollision(world.lastCollision,{
+        gearActive:activeHooks>0,
+        secondsSinceGear:state.flightClock-state.lastGearAt,
+        secondsSinceImpact:state.flightClock-state.lastImpactAt
+      });
+      if(collision.damage>0){
+        state.lastImpactAt=state.flightClock;
+        state.impactFeedback=Math.min(1,collision.damage/40);
+        const reduced=collision.damage*(1-(state.aspect?.armor||0));
         state.health=Math.max(0,state.health-reduced);
         if(state.health===0){state.recoveries++;reset();return;}
       }
