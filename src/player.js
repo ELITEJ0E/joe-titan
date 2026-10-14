@@ -11,7 +11,12 @@ const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 const mix=(a,b,t)=>a+(b-a)*t;
-const mat=(color,metalness=0,roughness=.7)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
+const poseEuler=new THREE.Euler(),poseQuat=new THREE.Quaternion();
+function smoothBone(node,x,y,z,dt,response=13){
+  poseEuler.set(x,y,z,'XYZ');poseQuat.setFromEuler(poseEuler);
+  node.quaternion.slerp(poseQuat,1-Math.exp(-Math.max(0,dt)*response));
+}
+const mat=(color,metalness=0,roughness=.7)=>new THREE.MeshLambertMaterial({color});
 const jacket=mat(0xa87b4e,0,.91), shirt=mat(0xe4d9be,0,.95), pants=mat(0xede2cb,0,.94);
 const leather=mat(0x3d261c,0,.83), leatherLite=mat(0x77503a,0,.85), boot=mat(0x32251f,0,.76);
 const green=mat(0x284c3c,0,.94),greenDark=mat(0x193a30,0,.95),steel=mat(0x86939a,.72,.3),brightSteel=mat(0xc5d2d4,.68,.27);
@@ -22,7 +27,7 @@ function rod(p,a,b,r,m){const v=new THREE.Vector3(...a),w=new THREE.Vector3(...b
 const o=mesh(p,new THREE.CylinderGeometry(r,r,delta.length(),7),m,...v.clone().add(w).multiplyScalar(.5).toArray());o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());return o;}
 function capePanel(parent,side){
   const shape=new THREE.Shape();shape.moveTo(0,0);shape.lineTo(side*.50,-.08);shape.lineTo(side*.77,-.92);
-  shape.quadraticCurveTo(side*.53,-1.17,side*.26,-1.04);shape.lineTo(0,-1.02);shape.closePath();
+  shape.lineTo(side*.55,-1.14);shape.lineTo(side*.28,-1.02);shape.lineTo(0,-1.02);shape.closePath();
   const g=new THREE.ShapeGeometry(shape,12);const m=green.clone();m.side=THREE.DoubleSide;
   const o=new THREE.Mesh(g,m);o.rotation.x=-.19;o.position.set(0,1.08,.40);o.castShadow=true;parent.add(o);return o;
 }
@@ -42,15 +47,19 @@ function avatar(scene){
   rod(tilt,[-.33,.92,.25],[.25,.18,.30],.042,leatherLite);
   rod(tilt,[.33,.92,.25],[-.25,.18,.30],.042,leatherLite);
   box(tilt,.23,.10,.04,-.13,.58,-.309,brass);box(tilt,.23,.10,.04,.13,.58,-.309,brass);
-  // Head and short layered windswept hair (face points toward local -Z).
-  mesh(tilt,new THREE.CylinderGeometry(.19,.25,.20,12),skin,0,1.16,0);
-  const head=mesh(tilt,new THREE.SphereGeometry(.275,18,14),skin,0,1.49,-.018);head.scale.set(.95,1.06,.87);
-  const hairCap=mesh(tilt,new THREE.SphereGeometry(.285,18,12,0,Math.PI*2,0,Math.PI*.60),hair,0,1.59,-.007);
-  for(let k=0;k<7;k++){const t=(k-3)/3;const strand=mesh(tilt,new THREE.ConeGeometry(.083,.25,5),hair,t*.205,1.63,-.205);strand.rotation.z=.3+t*.45;strand.rotation.x=-.27;}
-  for(const s of [-1,1]){
-    mesh(tilt,new THREE.SphereGeometry(.025,7,5),leather,s*.108,1.50,-.252);
-    rod(tilt,[s*.19,1.30,-.18],[s*.20,1.55,-.13],.013,hair);
+  // Minecraft-style head with pixel-like flat facial features. A named head
+  // pivot is animated separately from the torso for convincing high-speed aim.
+  box(tilt,.16,.17,.17,0,1.20,0,skin);
+  const headRig=new THREE.Group();headRig.name='pilot head';
+  headRig.position.set(0,1.49,-.02);tilt.add(headRig);
+  box(headRig,.52,.52,.50,0,0,0,skin);
+  box(headRig,.56,.16,.53,0,.25,0,hair);
+  for(const x of [-.18,-.06,.06,.18])box(headRig,.12,.11,.08,x,.17,-.265,hair);
+  for(const x of [-.115,.115]){
+    box(headRig,.055,.05,.02,x,.018,-.262,leather);
+    box(headRig,.022,.018,.022,x,-.085,-.262,leatherLite);
   }
+  box(headRig,.105,.025,.016,0,-.16,-.262,leather);
   // Shoulder cloak with independently moving panels and custom twin-wing back emblem.
   const capePivot=new THREE.Group();capePivot.position.set(0,0,0);tilt.add(capePivot);
   const capeL=capePanel(capePivot,-1),capeR=capePanel(capePivot,1);
@@ -76,22 +85,33 @@ function avatar(scene){
     box(tilt,.14,.13,.24,s*.70,.08,-.13,leather);
     rod(tilt,[s*.29,.49,-.20],[s*.58,-.21,-.19],.036,leatherLite);
   }
-  const arms=[],legs=[];
-  for(const s of [-1,1]){
-    const a=new THREE.Group();a.position.set(s*.51,.91,0);tilt.add(a);arms.push(a);
-    box(a,.30,.54,.34,s*.02,-.25,0,jacket);
-    box(a,.28,.19,.32,s*.02,-.58,0,shirt);
-    box(a,.29,.20,.33,s*.02,-.76,0,leather);
-    box(a,.19,.23,.26,s*.02,-.86,-.03,skin);
-    const handle=box(a,.13,.35,.14,s*.02,-.93,-.22,leather);handle.rotation.x=-.25;
-    box(a,.09,.08,.28,s*.02,-.75,-.28,brass);
-    const l=new THREE.Group();l.position.set(s*.22,-.23,0);tilt.add(l);legs.push(l);
-    box(l,.34,.79,.35,0,-.33,0,pants);
-    box(l,.37,.52,.37,0,-.88,0,boot);
-    box(l,.39,.17,.63,0,-1.13,-.15,boot);
-    box(l,.40,.075,.42,0,-.66,0,leather);
-    for(const y of [-.20,-.47]){const strap=box(l,.39,.055,.39,0,y,0,leather);strap.rotation.z=s*.055;}
-    box(l,.10,.085,.05,s*.18,-.45,-.20,brass);
+  const arms=[],legs=[],elbows=[],knees=[],blades=[];
+  for(const sign of [-1,1]){
+    const arm=new THREE.Group();arm.name=sign<0?'left shoulder':'right shoulder';
+    arm.position.set(sign*.51,.91,0);tilt.add(arm);arms.push(arm);
+    box(arm,.30,.53,.34,sign*.02,-.24,0,jacket);
+    box(arm,.32,.07,.35,sign*.02,-.49,0,leather);
+    const elbow=new THREE.Group();elbow.name=sign<0?'left elbow':'right elbow';
+    elbow.position.set(sign*.02,-.49,0);arm.add(elbow);elbows.push(elbow);
+    box(elbow,.29,.27,.32,0,-.13,0,shirt);
+    box(elbow,.28,.14,.33,0,-.29,0,leather);
+    box(elbow,.20,.14,.25,0,-.38,-.03,skin);
+    box(elbow,.13,.26,.15,0,-.46,-.22,leather);
+    box(elbow,.09,.07,.28,0,-.31,-.28,brass);
+    const blade=box(elbow,.055,.51,.07,0,-.79,-.25,brightSteel);
+    blade.name=sign<0?'left blade':'right blade';
+    blade.visible=true;blades.push(blade);
+    const leg=new THREE.Group();leg.name=sign<0?'left hip':'right hip';
+    leg.position.set(sign*.22,-.23,0);tilt.add(leg);legs.push(leg);
+    box(leg,.34,.64,.35,0,-.27,0,pants);
+    box(leg,.38,.06,.40,0,-.13,0,leather);
+    const knee=new THREE.Group();knee.name=sign<0?'left knee':'right knee';
+    knee.position.y=-.55;leg.add(knee);knees.push(knee);
+    box(knee,.37,.40,.37,0,-.23,0,boot);
+    box(knee,.39,.16,.63,0,-.58,-.15,boot);
+    box(knee,.40,.075,.42,0,-.11,0,leather);
+    box(knee,.39,.06,.40,0,-.35,0,leather);
+    box(knee,.10,.085,.05,sign*.18,-.24,-.20,brass);
   }
   const shadow=new THREE.Mesh(new THREE.CircleGeometry(.85,20),new THREE.MeshBasicMaterial({color:0x111b23,transparent:true,opacity:.22,depthWrite:false}));
   shadow.rotation.x=-Math.PI/2;scene.add(shadow);
@@ -118,7 +138,7 @@ function avatar(scene){
     }));
     line.visible=false;line.frustumCulled=false;scene.add(line);windTrails.push(line);
   }
-  return {root,tilt,arms,legs,capeL,capeR,shadow,ropeLines,tips,jets,windTrails};
+  return {root,tilt,headRig,arms,elbows,legs,knees,blades,capeL,capeR,shadow,ropeLines,tips,jets,windTrails};
 }
 export function createPlayer(scene,world,camera){
   const model=avatar(scene);
@@ -265,10 +285,20 @@ export function createPlayer(scene,world,camera){
     model.tilt.rotation.x=mix(model.tilt.rotation.x,pose.pitch,1-Math.exp(-dt*7));
     const walk=state.grounded?Math.sin(time*flatSpeed*.92)*clamp(flatSpeed/9,0,1):.28;
     const aerialPose=!state.grounded?clamp(flatSpeed/45,0,1):0;
-    model.legs[0].rotation.x=walk*.72+(state.grounded?0:-.39-aerialPose*.12);
-    model.legs[1].rotation.x=-walk*.72+(state.grounded?0:-.39-aerialPose*.12);
-    model.arms[0].rotation.x=state.hooks[0]?-.92:(state.grounded?-walk*.36:-.6);
-    model.arms[1].rotation.x=state.hooks[1]?-.92:(state.grounded?walk*.36:-.6);
+    const slash=state.attackTimer>0?Math.sin(Math.PI*(1-state.attackTimer/.32)):0;
+    const flying=!state.grounded;
+    for(let i=0;i<2;i++){
+      const side=i===0?-1:1,legWalk=side*walk*.72;
+      const legAngle=legWalk+(flying?-.39-aerialPose*.12:0);
+      smoothBone(model.legs[i],legAngle,0,side*(flying?.12:0),dt,16);
+      smoothBone(model.knees[i],flying?.28+clamp(-legAngle,0,.23):Math.max(0,legWalk)*.19,0,0,dt,14);
+      const reach=state.hooks[i]?-.92:(flying?-.6:-side*walk*.36);
+      const slashArc=slash*(i===0?-.6:.78);
+      smoothBone(model.arms[i],reach+slashArc,side*slash*.22,side*.09,dt,18);
+      smoothBone(model.elbows[i],state.hooks[i]?-.25:flying?-.32:-.14,0,side*slash*.18,dt,17);
+      model.blades[i].visible=state.blades>0||state.attackTimer>0;
+    }
+    smoothBone(model.headRig,flying?-.1:0,clamp(state.bank*.24,-.16,.16),-state.bank*.23,dt,12);
     for(let i=0;i<2;i++){
       const hook=state.hooks[i],line=model.ropeLines[i],tip=model.tips[i];
       line.visible=!!hook;tip.visible=!!hook;
@@ -331,8 +361,9 @@ export function createPlayer(scene,world,camera){
     // Light roll echoes the pilot's sideways banking without disorienting
     // the player or moving the actual aim ray off the crosshair.
     if(!state.firstPerson)camera.rotateZ(clamp(state.bank*.095,-.046,.046));
-    const targetFov=state.speed>20?72+clamp((state.speed-20)*.16,0,10):72;
-    const nextFov=mix(camera.fov,targetFov,1-Math.exp(-dt*3));
+    const movementFov=clamp((state.speed-9)*.42,0,25);
+    const targetFov=72+movementFov+(state.boost?5:0)+(state.hooks.some(Boolean)&&state.speed>15?2:0);
+    const nextFov=mix(camera.fov,targetFov,1-Math.exp(-dt*5));
     if(Math.abs(nextFov-camera.fov)>.002){camera.fov=nextFov;camera.updateProjectionMatrix();}
     model.root.visible=!state.firstPerson;
   }

@@ -39,12 +39,12 @@ test('player-facing blade attack severs nearby target arm and hides it in the 3D
  const e=manager.enemies[0];
  e.position.set(0,0,0);e.group.position.copy(e.position);
  e.forward.set(0,0,-1);
- const origin=V(-e.height*.15,e.height*.56,-5);
+ const origin=V(-e.height*.182,e.height*.79,-5);
  const result=manager.severArm(origin,V(0,0,1),8);
  assert.equal(result.kind,'limb');
  assert.equal(result.side,'left');
  manager.update(.05,V(150,0,150),1);
- assert.equal(e.group.children[2].visible,false);
+ assert.equal(e.rig.arms.left.shoulder.visible,false);
  manager.reset();
- assert.equal(e.group.children[2].visible,true);
+ assert.equal(e.rig.arms.left.shoulder.visible,true);
 });

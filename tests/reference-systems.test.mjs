@@ -54,7 +54,7 @@ test('new shifter Titan variants have multiple nape segments',()=>{
  assert.equal(sim.enemies[0].shifter,true);
  assert.ok(sim.enemies[0].napeHP>=3);
  const e=sim.enemies[1];e.forward.set(0,0,-1);
- const p=V(10,e.height*.82,-7),d=V(0,0,1);
+ const p=V(10,e.height*.82,7),d=V(0,0,-1);
  const shallow=strikeWeakPoint(e,p,d,25,10);
  assert.equal(shallow.kind,'shallow');
  const deep=strikeWeakPoint(e,p,d,45,10);
@@ -80,9 +80,13 @@ test('armored Titan grab requires seven unique escape inputs and freezes pilot',
 });
 test('Armored attack initiates zero-damage grab',()=>{
  const sim=createEnemySimulation([{type:'armored',position:[0,0,0],patrol:[0,0,0]}]);
- const result=sim.update(.1,V(1,1,1));
- assert.equal(result.grab,true);
- assert.equal(result.damage,0);
+ let grabbed=false;
+ for(let i=0;i<30;i++){
+   const result=sim.update(.05,V(1,1,1));
+   grabbed ||= result.grab;
+   assert.equal(result.damage,0);
+ }
+ assert.equal(grabbed,true,'armored grab should land after windup and lunge');
 });
 test('Beast boulder launches at measured speed and disappears on world collision',()=>{
  const scene=new THREE.Scene(),world={grappleRay:()=>null};

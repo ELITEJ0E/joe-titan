@@ -13,6 +13,29 @@ const ICE_SERVERS=[
   {urls:'turns:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
 ];
 
+
+// One tiny, pixel-sharp label texture per remote scout. Browser multiplayer
+// creates these lazily; the Node test environment never needs a DOM.
+function makeScoutNameTag(text,color){
+  if(typeof document==='undefined')return null;
+  const canvas=document.createElement('canvas');
+  canvas.width=128;canvas.height=32;
+  const ctx=canvas.getContext('2d');
+  if(!ctx)return null;
+  ctx.fillStyle='rgba(13,22,30,.78)';ctx.fillRect(0,0,128,32);
+  ctx.strokeStyle=color;ctx.lineWidth=2;ctx.strokeRect(1,1,126,30);
+  ctx.font='bold 17px monospace';ctx.textAlign='center';
+  ctx.fillStyle='#ffffff';ctx.fillText(text.slice(0,13),64,22);
+  const texture=new THREE.CanvasTexture(canvas);
+  texture.magFilter=texture.minFilter=THREE.NearestFilter;
+  texture.generateMipmaps=false;texture.colorSpace=THREE.SRGBColorSpace;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({
+    map:texture,transparent:true,depthWrite:false,alphaTest:.1
+  }));
+  sprite.position.set(0,2.3,0);sprite.scale.set(1.35,.34,1);
+  return sprite;
+}
+
 function makeRemoteAvatar(scene,index=0){
   const group=new THREE.Group();
   const accent=COLORS[index%COLORS.length];
@@ -22,7 +45,7 @@ function makeRemoteAvatar(scene,index=0){
   const box=(w,h,d,material,position)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);mesh.position.set(...position);group.add(mesh);return mesh;};
   const torso=box(.62,.78,.38,armor,[0,1.18,0]);torso.rotation.z=.02;
   const chest=box(.42,.32,.405,dark,[0,1.34,-.015]);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(.25,12,8),dark);head.position.set(0,1.78,0);group.add(head);
+  const head=box(.48,.48,.46,dark,[0,1.78,0]);head.name='remote voxel head';
   const visor=box(.3,.08,.27,glow,[0,1.8,-.21]);
   const helmetRing=new THREE.Mesh(new THREE.TorusGeometry(.28,.025,6,16),glow);helmetRing.rotation.x=Math.PI/2;helmetRing.position.set(0,1.78,0);group.add(helmetRing);
   const shoulderL=box(.2,.22,.28,armor,[-.43,1.42,0]);const shoulderR=box(.2,.22,.28,armor,[.43,1.42,0]);
@@ -37,7 +60,9 @@ function makeRemoteAvatar(scene,index=0){
   const jetL=new THREE.Mesh(new THREE.ConeGeometry(.1,.3,8),glow);jetL.rotation.x=-Math.PI/2;jetL.position.set(-.23,.72,.31);group.add(jetL);
   const jetR=jetL.clone();jetR.position.x=.23;group.add(jetR);
   const ring=new THREE.Mesh(new THREE.TorusGeometry(.72,.025,8,24),glow);ring.rotation.x=Math.PI/2;ring.position.y=.06;group.add(ring);
-  group.userData={accent,visor,ring,jetL,jetR};
+  const tag=makeScoutNameTag('SCOUT '+String(index+1).padStart(2,'0'),accent);
+  if(tag)group.add(tag);
+  group.userData={accent,visor,ring,jetL,jetR,tag};
   group.visible=false;scene.add(group);return group;
 }
 
@@ -70,7 +95,7 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
       avatar.userData.ring.rotation.z+=.035;avatar.userData.jetL.scale.y=state.aspect?1.25:1;avatar.userData.jetR.scale.y=state.aspect?1.25:1;
       onCount(connections.size);
     });
-    const close=()=>{clearTimeout(timeout);connections.delete(connection.peer);remoteStates.delete(connection.peer);const avatar=avatars.get(connection.peer);if(avatar){scene.remove(avatar);avatar.traverse((node)=>{node.geometry?.dispose?.();node.material?.dispose?.();});avatars.delete(connection.peer);}onCount(connections.size);if(!timedOut)setStatus(connections.size?'CONNECTED':'READY',connections.size?`${connections.size} pilot online`:'Room ready');};
+    const close=()=>{clearTimeout(timeout);connections.delete(connection.peer);remoteStates.delete(connection.peer);const avatar=avatars.get(connection.peer);if(avatar){scene.remove(avatar);avatar.traverse((node)=>{node.geometry?.dispose?.();node.material?.map?.dispose?.();node.material?.dispose?.();});avatars.delete(connection.peer);}onCount(connections.size);if(!timedOut)setStatus(connections.size?'CONNECTED':'READY',connections.size?`${connections.size} pilot online`:'Room ready');};
     connection.on('close',close);connection.on('error',()=>{timedOut=true;setStatus('ERROR','ROOM CONNECTION FAILED · RETRY JOIN');close();});
   };
   return {
