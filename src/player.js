@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
 import {applyODMMotor,applyReferenceAirDrag,ODM_TUNING} from './odm-motor.js';
-import {applyGazeGasBoost} from './odm-gas-propulsion.js';
+import {applyDirectionalGasBoost} from './odm-gas-propulsion.js';
 import {impactDamage} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
@@ -183,9 +183,10 @@ export function createPlayer(scene,world,camera){
     if(wish.lengthSq()>0)wish.normalize();
     const reeling=input.keys.has('ShiftLeft')||input.keys.has('ShiftRight');
     const activeHooks=state.hooks.filter(Boolean).length;
-    if(state.grounded){
+    const movingForward=wish.dot(forward)>0.01;
+    if(state.grounded&&!activeHooks){
       const speedMultiplier=state.aspect?.speed||1;
-      const goal=wish.clone().multiplyScalar((reeling?ODM_TUNING.sprint:ODM_TUNING.run)*speedMultiplier);
+      const goal=wish.clone().multiplyScalar((reeling&&movingForward?ODM_TUNING.sprint:ODM_TUNING.run)*speedMultiplier);
       groundVelocityBlend(state.velocity,goal,dt,false);
       // Hook forces are handled independently of the running controller.
       if(input.jumpQueued){state.velocity.y=9.6;state.grounded=false;}
@@ -197,10 +198,10 @@ export function createPlayer(scene,world,camera){
     }
     input.jumpQueued=false;
     if(input.keys.has('Space')&&!state.grounded&&state.gas>0){
-      const aim=viewDirection();
-      // REA hypothesis: gaze-directed gas is additive to anchor pull.
-      // WASD continues to steer via independent air acceleration only.
-      applyGazeGasBoost(state.velocity,aim,dt,{
+      const moveX=Number(input.keys.has('KeyD'))-Number(input.keys.has('KeyA'));
+      const moveY=Number(input.keys.has('KeyW'))-Number(input.keys.has('KeyS'));
+      const inputScale=Math.max(1,Math.hypot(moveX,moveY));
+      applyDirectionalGasBoost(state.velocity,state.yaw,state.pitch,moveX/inputScale,moveY/inputScale,dt,{
         acceleration:ODM_TUNING.boost,gravity:ODM_TUNING.gravity,
         liftFactor:ODM_TUNING.boostVerticalGravity,multiplier:state.aspect?.boost||1
       });
@@ -218,7 +219,7 @@ export function createPlayer(scene,world,camera){
     // winch thrust; Shift accelerates the reel. No teleporting or speed reset.
     state.gas=Math.max(0,state.gas-applyODMMotor(
       state.position,state.velocity,state.hooks,dt,
-      {reeling,gas:state.gas,reelMultiplier:state.aspect?.reel||1,forwardPump:input.keys.has('KeyW')}));
+      {reeling,gas:state.gas,reelMultiplier:state.aspect?.reel||1,forwardPump:movingForward}));
     for(const hook of state.hooks)if(hook)hook.age+=dt;
     state.velocity.y-=ODM_TUNING.gravity*dt;
     if(!state.grounded)applyReferenceAirDrag(state.velocity,dt);
