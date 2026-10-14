@@ -4,6 +4,7 @@ import {createTitanProjectiles,BOULDER} from './titan-projectiles.js';
 import {severTitanArm,canTitanSwipe,titanSwipeDamage} from './titan-limbs.js';
 import {createVoxelTitanRig,animateVoxelTitanRig} from './titan-voxel-rig.js';
 import {chooseNapeArcTarget,BLADE_ARC} from './scout-blade-arc.js';
+import {chooseTitanSteering,crowdSeparation} from './titan-navigation.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
@@ -38,20 +39,22 @@ export function titanAttackContact(enemy,target,{grab=false}={}){
   return true;
 }
 
-export function createEnemySimulation(spawns=[]){
+export function createEnemySimulation(spawns=[],world=null){
   const enemies=spawns.map((spawn,index)=>{
     const type=TYPES[spawn.type]||TYPES.wanderer,position=V(...spawn.position);
     return {id:spawn.id||`riftborn-${index}`,type:spawn.type||'wanderer',height:type.height,maxHealth:type.health,health:type.health,
       speed:type.speed,shifter:!!type.shifter,napeHP:segmentNapeHealth(type.health),armRight:0,armLeft:0,
       position,spawnPosition:position.clone(),patrol:V(...(spawn.patrol||spawn.position)),
       forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0,
-      attackPhase:'idle',phaseTime:0,patrolGoal:1,loiter:0,moving:0,flash:0};
+      attackPhase:'idle',phaseTime:0,patrolGoal:1,loiter:0,moving:0,flash:0,
+      zigzagTime:.6+(index%4)*.19,zigzagSign:index%2?1:-1,turnBias:index%2?1:-1};
   });
   function reset(){
     for(const e of enemies){
       e.position.copy(e.spawnPosition);e.health=e.maxHealth;e.napeHP=segmentNapeHealth(e.maxHealth);
       e.armRight=e.armLeft=0;e.alive=true;e.state='patrol';e.attack=0;e.stagger=0;
       e.attackPhase='idle';e.phaseTime=0;e.patrolGoal=1;e.loiter=0;e.moving=0;e.flash=0;
+      e.zigzagTime=.6+(enemies.indexOf(e)%4)*.19;e.zigzagSign=enemies.indexOf(e)%2?1:-1;
       e.forward.set(0,0,-1);
     }
   }
@@ -117,20 +120,37 @@ export function createEnemySimulation(spawns=[]){
       }
       const direction=destination.clone().sub(e.position);direction.y=0;
       const remaining=direction.length();
+      let canMove=true;
       if(remaining>1e-6){
         direction.multiplyScalar(1/remaining);
-        e.forward.lerp(direction,Math.min(1,dt*(pursuing?4.5:2.5))).normalize();
+        // Abnormal runners weave in short, predictable bursts while chasing.
+        // Reference timing range is observed; actual turn amplitude is JOE-specific.
+        if(pursuing&&e.type==='runner'&&remaining>9){
+          e.zigzagTime-=dt;
+          if(e.zigzagTime<=0){
+            e.zigzagSign*=-1;
+            e.zigzagTime=.6+(String(e.id).length%5)*.17;
+          }
+          const lateral=new THREE.Vector3(-direction.z,0,direction.x);
+          direction.addScaledVector(lateral,e.zigzagSign*.34).normalize();
+        }
+        const clear=chooseTitanSteering(world,e.position,direction,{
+          height:e.height,speed:e.speed,turnBias:e.turnBias
+        });
+        canMove=clear.lengthSq()>1e-8;
+        if(canMove)e.forward.lerp(clear,Math.min(1,dt*(pursuing?4.5:2.5))).normalize();
       }
       if(pursuing&&distance<7&&e.attack===0&&canTitanSwipe(e)){
         e.attackPhase='windup';e.phaseTime=e.type==='runner'?.28:.48;
         e.state='windup';continue;
       }
       const stop=pursuing?3.5:.7;
-      if(remaining>stop){
+      if(remaining>stop&&canMove){
         const travel=Math.min(remaining-stop,e.speed*slow*dt);
         e.position.addScaledVector(e.forward,travel);
         e.moving=clamp(travel/Math.max(.0001,e.speed*dt),0,1);
       }
+      if(canMove)e.position.add(crowdSeparation(e,enemies,dt));
       e.position.x=clamp(e.position.x,-181,181);
       e.position.z=clamp(e.position.z,-181,181);
     }
@@ -169,7 +189,7 @@ export function createEnemyManager(scene,world){
     {type:'wanderer',position:[-72,0,-67],patrol:[-105,0,-91]}, {type:'runner',position:[75,0,-92],patrol:[110,0,-106]},
     {type:'bruiser',position:[-117,0,75],patrol:[-132,0,110]}, {type:'wanderer',position:[98,0,83],patrol:[127,0,116]},
     {type:'beast',position:[-58,0,112],patrol:[-94,0,128]}, {type:'armored',position:[135,0,8],patrol:[153,0,29]}
-  ]);
+  ],world);
   simulation.enemies.forEach(enemy=>{
     const type=TYPES[enemy.type]||TYPES.wanderer;
     enemy.rig=createVoxelTitanRig(scene,enemy,type);
