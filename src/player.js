@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
+import {chooseGrappleTarget} from './odm-targeting.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 
@@ -110,25 +111,15 @@ export function createPlayer(scene,world,camera){
   const form=new THREE.Group();const formMat=new THREE.MeshBasicMaterial({color:0x82e8ff,transparent:true,opacity:.18,depthWrite:false,blending:THREE.AdditiveBlending});
   const formBody=new THREE.Mesh(new THREE.CapsuleGeometry(.72,2.1,5,10),formMat);formBody.position.y=1.75;form.add(formBody);
   const formCore=new THREE.Mesh(new THREE.SphereGeometry(.34,12,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88}));formCore.position.y=2.7;form.add(formCore);form.visible=false;scene.add(form);
+  const cameraAim=V(0,0,0);
   const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,grounded:true,
     hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false};
   camera.position.set(9,5,3);
   const heading=()=>V(-Math.sin(state.yaw),0,-Math.cos(state.yaw));
   const viewDirection=()=>V(-Math.sin(state.yaw)*Math.cos(state.pitch),Math.sin(state.pitch),-Math.cos(state.yaw)*Math.cos(state.pitch));
   function target(index){
-    const dir=viewDirection();const side=index===0?-1:1;
-    // An aimed raycast hits actual scene geometry; nearby roof anchors assist when the crosshair sees open sky.
-    let point=world.grappleRay(camera.position,dir,128);
-    const suggested=world.bestAnchor(state.position,dir,side);
-    // Low wall hits get assisted to rooftop targets; two simultaneous hooks
-    // favor distinct attachment points instead of clipping into one another.
-    const other=state.hooks[1-index];
-    if(!point||point.distanceTo(state.position)<7||(suggested&&point.y<state.position.y+3.5)
-        ||(other&&point.distanceTo(other.point)<3&&suggested))point=suggested||point;
-    if(!point)return null;
-    const dist=point.distanceTo(state.position);
-    if(dist<6||dist>129)return null;
-    return point;
+    return chooseGrappleTarget(world,camera.position,state.position,viewDirection(),
+      index===0?-1:1,state.hooks[1-index]?.point??null);
   }
   function fire(index){
     if(state.hooks[index])return false;
@@ -137,7 +128,8 @@ export function createPlayer(scene,world,camera){
     const dist=point.distanceTo(state.position);
     // A slack cable at attachment preserves momentum instead of snapping the body.
     state.hooks[index]={point,length:Math.max(7,dist),age:0};
-    state.velocity.addScaledVector(point.clone().sub(state.position).normalize(),4.8);
+    // Moderate initial take-up without an artificial high-speed teleport.
+    state.velocity.addScaledVector(point.clone().sub(state.position).normalize(),2.6);
     return true;
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
@@ -145,6 +137,7 @@ export function createPlayer(scene,world,camera){
     state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.grounded=true;state.aspect=null;form.visible=false;
     state.yaw=0;state.pitch=-.07;state.distance=0;state.speed=0;state.bank=0;state.boost=false;
     release(0);release(1);model.root.position.copy(state.position);model.root.rotation.set(0,0,0);model.tilt.rotation.set(0,0,0);
+    cameraAim.copy(state.position).add(V(0,.9,0));
     camera.position.copy(state.position).add(V(1.15,3.86,11.57));updateCamera(1,true);
   }
   const finiteVector=(v)=>[v.x,v.y,v.z].every(Number.isFinite);
@@ -166,7 +159,7 @@ export function createPlayer(scene,world,camera){
     const activeHooks=state.hooks.filter(Boolean).length;
     if(state.grounded){
       const speedMultiplier=state.aspect?.speed||1;
-      const goal=wish.clone().multiplyScalar((reeling?15:10.5)*speedMultiplier);const k=1-Math.exp(-dt*11);
+      const goal=wish.clone().multiplyScalar((reeling?15:10.5)*speedMultiplier);
       groundVelocityBlend(state.velocity,goal,dt,activeHooks>0);
       if(activeHooks)state.velocity.addScaledVector(wish,dt*16*speedMultiplier);
       if(input.jumpQueued){state.velocity.y=12.6;state.grounded=false;}
@@ -178,7 +171,11 @@ export function createPlayer(scene,world,camera){
     }
     input.jumpQueued=false;
     if(input.keys.has('Space')&&!state.grounded&&state.gas>0){
-      const dir=viewDirection();state.velocity.addScaledVector(dir,dt*(activeHooks?37:32)*(state.aspect?.boost||1));
+      const dir=viewDirection();
+      // A little existing momentum bleeds into the thrust vector: releasing a
+      // fast swing into a boost no longer makes an abrupt ninety-degree turn.
+      const thrust=dir.multiplyScalar(.84).addScaledVector(state.velocity.clone().normalize(),.16).normalize();
+      state.velocity.addScaledVector(thrust,dt*(activeHooks?37:32)*(state.aspect?.boost||1));
       state.velocity.y+=dt*5;state.gas=clamp(state.gas-dt*19,0,100);state.boost=true;
     }else state.boost=false;
     if(input.keys.has('KeyG')&&state.velocity.y<0&&state.gas>0){
@@ -192,14 +189,18 @@ export function createPlayer(scene,world,camera){
         const other=state.hooks.find(candidate=>candidate&&candidate!==hook);
         // Two cables must span their anchor separation; winching past this is impossible.
         const minimum=other?Math.max(5.7,hook.point.distanceTo(other.point)-other.length+.5):5.7;
-        const next=Math.max(minimum,hook.length-dt*21*(state.aspect?.reel||1));
+        const next=Math.max(minimum,hook.length-dt*(18+Math.min(10,state.speed*.2))*(state.aspect?.reel||1));
         if(next<hook.length){hook.length=next;state.gas=Math.max(0,state.gas-dt*2.3);}
       }
       const towards=hook.point.clone().sub(state.position),dist=towards.length(),unit=towards.multiplyScalar(1/(dist||1));
       const excess=Math.max(0,dist-hook.length);
-      if(excess>0){
+      if(excess>0||reeling&&state.gas>0){
         const radialSpeed=state.velocity.dot(unit);
-        const force=Math.min(95,excess*12+Math.max(0,-radialSpeed)*6);
+        const tension=excess*16+Math.max(0,-radialSpeed)*5;
+        const winch=reeling&&state.gas>0?20+Math.min(17,state.speed*.28):0;
+        // Split simultaneous winch force so two hooks don't double the launch
+        // acceleration. Both still constrain the same player trajectory.
+        const force=Math.min(110,tension+winch)/Math.sqrt(activeHooks||1);
         state.velocity.addScaledVector(unit,force*dt);
       }
     }
@@ -264,18 +265,22 @@ export function createPlayer(scene,world,camera){
     const shoulder=V(Math.cos(state.yaw)*1.15,.0,-Math.sin(state.yaw)*1.15);
     const desired=state.firstPerson?state.position.clone().add(V(0,1.3,0)):
       aim.clone().addScaledVector(dir,-11.6).add(V(0,2.15,0)).add(shoulder);
+    let obstructed=false;
     if(!state.firstPerson){
       const delta=desired.clone().sub(aim),dist=delta.length();let hit=world.grappleRay(aim,delta.clone().normalize(),dist);
-      if(hit){const closer=Math.max(.35,hit.distanceTo(aim)-.55);desired.copy(aim).addScaledVector(delta.normalize(),closer);snap=true;}
+      if(hit){const closer=Math.max(.35,hit.distanceTo(aim)-.65);desired.copy(aim).addScaledVector(delta.normalize(),closer);obstructed=true;}
     }
     desired.y=Math.max(.35,desired.y);
     if(snap||!finiteVector(camera.position))camera.position.copy(desired);
-    else camera.position.lerp(desired,1-Math.exp(-dt*(state.firstPerson?18:7.5)));
+    else camera.position.lerp(desired,1-Math.exp(-dt*(obstructed?19:state.firstPerson?18:7.5)));
     if(!state.firstPerson&&state.speed>18){const flightLift=clamp((state.speed-18)*.018,0,.65);camera.position.y+=flightLift*(1-Math.exp(-dt*4));}
     camera.position.y=Math.max(.35,camera.position.y);
-    camera.lookAt(state.firstPerson?camera.position.clone().add(dir):aim.clone().addScaledVector(dir,9));
+    const lookPoint=state.firstPerson?camera.position.clone().add(dir):aim.clone().addScaledVector(dir,6.5);
+    cameraAim.lerp(lookPoint,snap?1:1-Math.exp(-dt*(state.firstPerson?19:11)));
+    camera.lookAt(cameraAim);
     const targetFov=state.speed>20?72+clamp((state.speed-20)*.16,0,10):72;
-    camera.fov=mix(camera.fov,targetFov,1-Math.exp(-dt*3));camera.updateProjectionMatrix();
+    const nextFov=mix(camera.fov,targetFov,1-Math.exp(-dt*3));
+    if(Math.abs(nextFov-camera.fov)>.002){camera.fov=nextFov;camera.updateProjectionMatrix();}
     model.root.visible=!state.firstPerson;
   }
   reset();
