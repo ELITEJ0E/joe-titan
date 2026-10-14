@@ -87,6 +87,7 @@ function installVoxelPhysics(world,asset){
     return null;
   };
   world.resolveCollision=(pos,prev,vel)=>{
+    world.lastCollision={wallSpeed:0,landingSpeed:0};
     // If an outdated save or a geometry edge starts inside a solid wall,
     // recover to the verified street spawn instead of endlessly reverting
     // to the same trapped position.
@@ -95,9 +96,18 @@ function installVoxelPhysics(world,asset){
     }
     // Swept horizontal capsule approximation glides along buildings instead
     // of zeroing both horizontal axes whenever a high-speed hook hits a wall.
-    slideVoxelHorizontal(pos,prev,vel,solid);
+    const horizontalSpeed=Math.hypot(vel.x,vel.z);
+    const horizontal=slideVoxelHorizontal(pos,prev,vel,solid);
+    if(horizontal.blockedX||horizontal.blockedZ){
+      world.lastCollision.wallSpeed=horizontalSpeed;
+      // A wall should absorb 95% of speed on the blocked axis.
+      // Velocity after collision has already been zeroed by the swept solver.
+    }
     const feet=prev.y-1,ground=roof(pos.x,pos.z,feet-ORIGIN.y+.3);
-    if(vel.y<=0&&feet>=ground-.38&&pos.y<=ground+1){pos.y=ground+1;vel.y=0;return true;}
+    if(vel.y<=0&&feet>=ground-.38&&pos.y<=ground+1){
+      world.lastCollision.landingSpeed=-vel.y;
+      pos.y=ground+1;vel.y=0;return true;
+    }
     if(pos.y<=1){pos.y=1;if(vel.y<0)vel.y=0;return true;}
     pos.x=clamp(pos.x,-152,152);pos.z=clamp(pos.z,-146,158);
     return false;
