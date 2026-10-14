@@ -81,3 +81,29 @@ test('cut effects reuse a bounded pool and fade completely',()=>{
  assert.equal(scene.children.length,12);
  fx.clear();assert.equal(fx.activeCount(),0);
 });
+
+test('landing compression animates after airborne descent without modifying flight velocity',()=>{
+ const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera();
+ let onGround=false;
+ const world={spawnPoint:V(0,1,0),grappleRay:()=>null,
+   resolveCollision:(pos,old,vel)=>{
+     if(onGround){vel.y=0;pos.y=1;return true;}return false;
+   }};
+ const player=createPlayer(scene,world,camera),input={keys:new Set(),jumpQueued:false};
+ player.update(.01,input,0);
+ player.velocity.set(0,-24,0);onGround=true;
+ player.update(.01,input,.01);
+ assert.ok(player.model.tilt.position.y<0,'body compresses on impact');
+ assert.equal(player.velocity.y,0,'only collision system determines landing velocity');
+ for(let i=0;i<80;i++)player.update(.01,input,.02+i*.01);
+ assert.ok(Math.abs(player.model.tilt.position.y)<.001,'landing pose relaxes');
+});
+
+test('grab animation bends arms and head without affecting existing escape mechanics',()=>{
+ const player=createPlayer(new THREE.Scene(),{spawnPoint:V(0,1,0),
+    grappleRay:()=>null,resolveCollision:()=>true},new THREE.PerspectiveCamera());
+ player.grab();
+ player.update(.05,{keys:new Set(),jumpQueued:false},.05);
+ assert.ok(player.model.headRig.quaternion.angleTo(new THREE.Quaternion())>.01);
+ assert.ok(player.model.arms[0].quaternion.angleTo(new THREE.Quaternion())>.01);
+});
