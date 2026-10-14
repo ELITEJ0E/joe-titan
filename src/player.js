@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
+import {pilotPoseTargets} from './odm-pose.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 
@@ -128,8 +129,10 @@ export function createPlayer(scene,world,camera){
   const heading=()=>V(-Math.sin(state.yaw),0,-Math.cos(state.yaw));
   const viewDirection=()=>V(-Math.sin(state.yaw)*Math.cos(state.pitch),Math.sin(state.pitch),-Math.cos(state.yaw)*Math.cos(state.pitch));
   function target(index){
-    return chooseGrappleTarget(world,camera.position,state.position,viewDirection(),
-      index===0?-1:1,state.hooks[1-index]?.point??null);
+    // The visible reticle is the camera's optical axis. Never approximate it
+    // with player yaw/pitch: shoulder offset and smooth camera look differ.
+    const reticleRay=camera.getWorldDirection(new THREE.Vector3());
+    return chooseGrappleTarget(world,camera.position,state.position,reticleRay,index===0?-1:1);
   }
   function fire(index){
     if(state.hooks[index])return false;
@@ -231,15 +234,19 @@ export function createPlayer(scene,world,camera){
     let yawDelta=((desiredYaw-model.root.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
     model.root.rotation.y+=yawDelta*(1-Math.exp(-dt*8));
     model.root.position.copy(state.position);
-    const sideVel=state.velocity.dot(right);
-    state.bank=mix(state.bank,clamp(-sideVel/60,-.5,.5),1-Math.exp(-dt*4.3));
+    const pose=pilotPoseTargets({
+      velocity:state.velocity,position:state.position,forward,right,
+      hooks:state.hooks,grounded:state.grounded,boost:state.boost,
+      steer:Number(input.keys.has('KeyD'))-Number(input.keys.has('KeyA'))
+    });
+    state.bank=mix(state.bank,pose.bank,1-Math.exp(-dt*7));
     model.tilt.rotation.z=state.bank;
     // Flutter cape in proportion to aerodynamic velocity, without touching physics.
     model.capeL.rotation.x=mix(model.capeL.rotation.x,clamp(-state.speed/105,-.66,-.06),1-Math.exp(-dt*5));
     model.capeR.rotation.x=mix(model.capeR.rotation.x,clamp(-state.speed/105,-.66,-.06),1-Math.exp(-dt*5));
     model.capeL.rotation.z=Math.sin(time*6)*.045;
     model.capeR.rotation.z=-Math.sin(time*6+.6)*.045;
-    model.tilt.rotation.x=mix(model.tilt.rotation.x,state.grounded?0:clamp(state.velocity.y/110-.22,-.65,.38),1-Math.exp(-dt*5));
+    model.tilt.rotation.x=mix(model.tilt.rotation.x,pose.pitch,1-Math.exp(-dt*7));
     const walk=state.grounded?Math.sin(time*flatSpeed*.92)*clamp(flatSpeed/9,0,1):.28;
     const aerialPose=!state.grounded?clamp(flatSpeed/45,0,1):0;
     model.legs[0].rotation.x=walk*.72+(state.grounded?0:-.39-aerialPose*.12);
