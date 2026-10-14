@@ -147,7 +147,7 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
    new THREE.ShaderMaterial({uniforms:skyUniforms,vertexShader:skyVS,fragmentShader:skyFS,
      side:THREE.BackSide,depthWrite:false,depthTest:false,fog:false,toneMapped:true}));
  sky.name='Shiganshina Golden Sky';sky.frustumCulled=false;sky.renderOrder=-1000;
- sky.onBeforeRender=(_r,_s,camera)=>sky.position.copy(camera.position);
+ sky.onBeforeRender=(_r,_s,camera)=>{sky.position.copy(camera.position);sky.updateMatrixWorld();};
  scene.add(sky);
  const ambient=new THREE.HemisphereLight(0xf4e8d3,0x5c7695,1.75);
  scene.add(ambient);
@@ -165,7 +165,7 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
   const p=VISUAL_PRESETS[normaliseVisualQuality(quality)];
   uniforms.uFogNear.value=p.fogNear;uniforms.uFogFar.value=p.fogFar;
   uniforms.uCloudShadow.value=p.cloudShadow;uniforms.uEdgeAO.value=p.edgeAO;
-  skyUniforms.uCloudOpacity.value=p.bloom?.34:.12;
+  skyUniforms.uCloudOpacity.value=p.bloom ? .34 : .12;
   scene.fog.near=p.fogNear;scene.fog.far=p.fogFar+28;
   sun.shadow.mapSize.set(p.shadowMap,p.shadowMap);
   if(sun.shadow.map)sun.shadow.map.dispose();
