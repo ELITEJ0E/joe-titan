@@ -89,7 +89,7 @@ export function createEnemyManager(scene,world){
   simulation.enemies.forEach(enemy=>humanoid(scene,enemy));
   const boulders=createTitanProjectiles(scene,world);
   const throwTimers=new Map();let slowTimer=0,decoyTimer=0,decoy=null;
-  function reset(){simulation.reset();boulders.reset();throwTimers.clear();slowTimer=0;decoyTimer=0;decoy=null;for(const enemy of simulation.enemies){if(enemy.group){enemy.group.visible=true;enemy.group.position.copy(enemy.position);}}}
+  function reset(){simulation.reset();boulders.reset();throwTimers.clear();slowTimer=0;decoyTimer=0;decoy=null;for(const enemy of simulation.enemies){if(enemy.group){enemy.group.visible=true;enemy.group.position.copy(enemy.position);if(enemy.group.children[2])enemy.group.children[2].visible=true;if(enemy.group.children[3])enemy.group.children[3].visible=true;}}}
   function update(dt,playerPosition,time){
     slowTimer=Math.max(0,slowTimer-dt);decoyTimer=Math.max(0,decoyTimer-dt);
     const result=simulation.update(dt,playerPosition,decoyTimer>0?decoy:null,slowTimer>0?.48:1);
@@ -105,6 +105,9 @@ export function createEnemyManager(scene,world){
         }else throwTimers.set(enemy.id,timer);
       }
       if(!enemy.group)continue;enemy.group.visible=enemy.alive;enemy.group.position.copy(enemy.position);enemy.group.rotation.y=Math.atan2(enemy.forward.x,enemy.forward.z);
+      // Hide severed procedural arms until their individual regrowth timers expire.
+      if(enemy.group.children[2])enemy.group.children[2].visible=enemy.armLeft<=0;
+      if(enemy.group.children[3])enemy.group.children[3].visible=enemy.armRight<=0;
       const stride=Math.sin(time*(enemy.speed*2)+enemy.position.x)*.09;enemy.group.children[0].rotation.z=stride;
       if(enemy.weak)enemy.weak.scale.setScalar(enemy.state==='stagger'?1.65:1+Math.sin(time*4)*.16);
     }
