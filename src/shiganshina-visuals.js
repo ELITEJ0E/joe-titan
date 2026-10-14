@@ -33,12 +33,30 @@ export function createShiganshinaAtlas(colors){
           ctx.fillStyle='rgba(25,25,27,.28)';
         }
       }
+      // Individual masonry chips, sand-grain highlights and uneven stone
+      // patches add depth without introducing copyrighted block textures.
+      for(let n=0;n<30;n++){
+        const px=x+Math.floor(rng()*31),py=y+Math.floor(rng()*31);
+        ctx.fillStyle=rng()>.52?'rgba(249,239,208,.19)':'rgba(34,40,43,.16)';
+        ctx.fillRect(px,py,1+rng()*2,1+rng()*2);
+      }
+      if(t===24){ // mossy masonry: irregular green mineral staining
+        for(let n=0;n<17;n++){
+          ctx.fillStyle=rng()>.45?'rgba(72,98,59,.35)':'rgba(118,130,72,.22)';
+          ctx.fillRect(x+rng()*30,y+rng()*30,2+rng()*4,1+rng()*2);
+        }
+      }
     }else if(roofs.has(t)){
       for(let row=0;row<4;row++){
         const py=y+row*8,shift=row%2?6:0;
         ctx.fillStyle='rgba(41,21,18,.34)';ctx.fillRect(x,py+7,32,1);
         ctx.fillStyle='rgba(255,212,162,.17)';ctx.fillRect(x,py,32,1);
-        for(let i=-shift;i<32;i+=12){ctx.fillStyle='rgba(50,24,22,.24)';ctx.fillRect(x+i,py+1,1,6);}
+        for(let i=-shift;i<32;i+=12){
+          ctx.fillStyle='rgba(50,24,22,.24)';ctx.fillRect(x+i,py+1,1,6);
+          ctx.fillStyle=rng()>.5?'rgba(251,210,158,.15)':'rgba(69,28,22,.12)';
+          ctx.fillRect(x+i+2,py+2,7,3);
+          ctx.fillStyle='rgba(255,234,190,.12)';ctx.fillRect(x+i+2,py+1,6,1);
+        }
       }
     }else if(timber.has(t)){
       for(let i=1;i<32;i+=6){ctx.fillStyle='rgba(30,17,15,.27)';ctx.fillRect(x+i,y,1,32);ctx.fillStyle='rgba(239,189,136,.13)';ctx.fillRect(x+i+2,y,1,32);}
