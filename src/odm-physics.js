@@ -32,7 +32,7 @@ export function solveTetherConstraints(position, velocity, hooks, iterations=8) 
 // velocity override. A normal running controller is still used without hooks.
 export function groundVelocityBlend(velocity,goal,dt,hasTether) {
   if(hasTether)return;
-  const blend=1-Math.exp(-dt*11);
+  const blend=1-Math.exp(-dt*16);
   velocity.x+=(goal.x-velocity.x)*blend;
   velocity.z+=(goal.z-velocity.z)*blend;
 }
