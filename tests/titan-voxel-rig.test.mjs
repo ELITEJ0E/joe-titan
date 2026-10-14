@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createVoxelTitanRig,animateVoxelTitanRig,smoothVoxelJoint} from '../src/titan-voxel-rig.js';
-import {createEnemySimulation,createEnemyManager} from '../src/enemies.js';
+import {createEnemySimulation,createEnemyManager,titanAttackContact} from '../src/enemies.js';
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 
 test('voxel Titans have named joints, pixel-sharp markers and rear nape',()=>{
@@ -65,4 +65,16 @@ test('manager exposes visual bones without relying on group child indices',()=>{
   assert.equal(target.rig.arms.left.shoulder.visible,false);
   manager.reset();
   assert.equal(target.rig.arms.left.shoulder.visible,true);
+});
+
+test('Titan hits need forward-facing and vertical contact, not just horizontal overlap',()=>{
+  const sim=createEnemySimulation([{type:'runner',position:[0,0,0]}]);
+  const e=sim.enemies[0];e.forward.set(0,0,-1);
+  assert.equal(titanAttackContact(e,V(2,1,-2)),true);
+  assert.equal(titanAttackContact(e,V(2,48,-2)),false);
+  assert.equal(titanAttackContact(e,V(0,1,4)),false,'scout behind the Titan is outside the attack arc');
+  const airborne=V(0,70,-2);
+  let damage=0;
+  for(let i=0;i<80;i++)damage+=sim.update(.05,airborne).damage;
+  assert.equal(damage,0,'flying overhead cannot be hit by an unreachably low ground swipe');
 });

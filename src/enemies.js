@@ -15,6 +15,28 @@ const TYPES={
   colossus:{name:'Colossus',height:34,speed:1.5,health:400,color:0xb85d4f,shifter:true}
 };
 
+
+/**
+ * Original oriented attack hitbox. Horizontal proximity alone is never a hit:
+ * the target must be within the Titan's vertically reachable swipe volume and
+ * inside its forward-facing attack arc.
+ */
+export function titanAttackContact(enemy,target,{grab=false}={}){
+  if(!enemy?.alive||!target)return false;
+  const dx=target.x-enemy.position.x,dz=target.z-enemy.position.z;
+  const planar=Math.hypot(dx,dz);
+  const radius=grab?Math.min(4.8,enemy.height*.36):Math.min(8.2,enemy.height*.52);
+  if(planar>radius)return false;
+  const vertical=target.y-(enemy.position.y+enemy.height*.62);
+  const reachAbove=enemy.height*.40,reachBelow=enemy.height*.65;
+  if(vertical>reachAbove||vertical< -reachBelow)return false;
+  if(planar>.4&&enemy.forward){
+    const cone=(dx*enemy.forward.x+dz*enemy.forward.z)/planar;
+    if(cone<-.12)return false;
+  }
+  return true;
+}
+
 export function createEnemySimulation(spawns=[]){
   const enemies=spawns.map((spawn,index)=>{
     const type=TYPES[spawn.type]||TYPES.wanderer,position=V(...spawn.position);
@@ -47,6 +69,10 @@ export function createEnemySimulation(spawns=[]){
         e.state='stagger';e.attackPhase='idle';e.phaseTime=0;continue;
       }
       if(e.attackPhase!=='idle'){
+        // Telegraph follows the scout during windup; the actual lunge/strike
+        // then locks that orientation to make sidesteps meaningful.
+        if(e.attackPhase==='windup'&&distance>.1)
+          e.forward.lerp(offset.clone().normalize(),Math.min(1,dt*10)).normalize();
         e.phaseTime-=dt;
         if(e.attackPhase==='windup'&&e.phaseTime<=0){
           e.attackPhase='lunge';e.phaseTime=.17;
@@ -58,8 +84,8 @@ export function createEnemySimulation(spawns=[]){
           if(e.phaseTime<=0){
             e.attackPhase='strike';e.phaseTime=.15;
             e.attack=e.type==='armored'?8:2.4;
-            if(distance<8.2&&canTitanSwipe(e)){
-              if(e.type==='armored'&&distance<4.8)grab=true;
+            if(canTitanSwipe(e)&&titanAttackContact(e,target)){
+              if(e.type==='armored'&&titanAttackContact(e,target,{grab:true}))grab=true;
               else damage+=titanSwipeDamage(e.type);
             }
           }
@@ -71,7 +97,7 @@ export function createEnemySimulation(spawns=[]){
         e.state=e.attackPhase==='idle'?'pursue':e.attackPhase;
         continue;
       }
-      const pursuing=distance<42;
+      const pursuing=distance<38+e.height*2.2;
       let destination;
       if(pursuing){
         e.state='pursue';destination=target;

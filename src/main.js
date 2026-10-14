@@ -139,18 +139,26 @@ function activateSelectedAspect(){
   if(aspect.effect==='command')enemies.suppress();
   showToast(`${aspect.name.toUpperCase()} ASPECT ENGAGED`);
 }
-function bladeStrike(){
-  if(!player.attack())return;
+function bladeStrike(){player.attack();}
+function spinStrike(){if(player.spin())showToast('SPIN CUT · COMBAT ARC');}
+function resolveBladeStrike(kind='slash'){
   const alignment=player.speed>1?Math.max(0,player.velocity.clone().normalize().dot(player.viewDirection())):0;
   const flightBonus=Math.min(18,Math.max(0,player.speed-14)*.36)*(.5+.5*alignment);
   const damage=(player.aspect?.effect==='impact'?42:22)+flightBonus;
   const origin=player.position.clone().add(new THREE.Vector3(0,1.35,0));
-  const result=enemies.strike(origin,player.viewDirection(),damage);
-  if(result.hit)showToast(result.defeated?'RIFTBORN DISPERSED':'WEAK POINT STRIKE');
-  else {
-    const limb=enemies.severArm(origin,player.viewDirection());
-    showToast(limb.kind==='limb'?'TITAN ARM SEVERED · ATTACK INTERRUPTED':'BLADE MISSED · AIM FOR THE NAPE OR ARMS');
+  // Spin is a short area sweep; each ray still obeys the existing close
+  // nape reach / rear alignment rules. No damage occurs at a distance.
+  const aim=player.viewDirection();
+  let result={hit:false},sever={kind:'none'};
+  const offsets=kind==='spin'?[-Math.PI/2,0,Math.PI/2,Math.PI]:[0];
+  for(const angle of offsets){
+    const ray=aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),angle);
+    result=enemies.strike(origin,ray,damage);
+    if(result.hit)break;
+    if(sever.kind!=='limb')sever=enemies.severArm(origin,ray);
   }
+  if(result.hit)showToast(result.defeated?'RIFTBORN DISPERSED':'WEAK POINT STRIKE');
+  else showToast(sever.kind==='limb'?'TITAN ARM SEVERED · ATTACK INTERRUPTED':'BLADE MISSED · AIM FOR THE NAPE OR ARMS');
 }
 function savePhoto(){
   if(graphics)graphics.render();else renderer.render(scene,camera);
@@ -281,6 +289,7 @@ function attachEvents(){
       if(event.code==='F3'){event.preventDefault();debugVisible=!debugVisible;$('diagnostics').classList.toggle('hidden',!debugVisible);}
       if(event.code==='KeyP')savePhoto();
       if(event.code==='KeyF')bladeStrike();
+      if(event.code==='KeyB')spinStrike();
       if(event.code==='KeyC'){const muzzle=player.position.clone().add(new THREE.Vector3(0,1.25,0));if(ranged?.fire(muzzle,player.viewDirection()))showToast('SCOUT PISTOL · '+ranged.ammo+' REMAINING');else showToast('RELOADING / NO AMMO');}
       if(event.code==='KeyX')activateSelectedAspect();
       if(/^Digit[1-9]$/.test(event.code)){const aspect=selectAspect(aspectState,Number(event.code.slice(-1))-1);showToast(`${aspect.name.toUpperCase()} SELECTED · X TO ENGAGE`);}
@@ -387,6 +396,8 @@ function loop(ms){
         hookRetryClock=.10;
       }
       player.update(PHYSICS_STEP,input,gameTime);
+      const activeHit=player.consumeAttackHit();
+      if(activeHit)resolveBladeStrike(activeHit);
       physicsTick++;
       // Physics integrates at 240 Hz; network snapshots remain 20 Hz.
       if(physicsTick%12===0)multiplayer?.update(player,gameTime);

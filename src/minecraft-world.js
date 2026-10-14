@@ -103,12 +103,16 @@ function installVoxelPhysics(world,asset){
     }
     // Swept horizontal capsule approximation glides along buildings instead
     // of zeroing both horizontal axes whenever a high-speed hook hits a wall.
-    const horizontalSpeed=Math.hypot(vel.x,vel.z);
+    const beforeX=vel.x,beforeZ=vel.z;
     const horizontal=slideVoxelHorizontal(pos,prev,vel,solid);
     if(horizontal.blockedX||horizontal.blockedZ){
-      world.lastCollision.wallSpeed=horizontalSpeed;
-      // A wall should absorb 95% of speed on the blocked axis.
-      // Velocity after collision has already been zeroed by the swept solver.
+      // Damage measures the component normal to the actual obstructing
+      // voxel face, not total horizontal speed. A pilot sliding sideways
+      // past a wall should not receive head-on collision damage.
+      world.lastCollision.wallSpeed=Math.max(
+        horizontal.blockedX?Math.abs(beforeX):0,
+        horizontal.blockedZ?Math.abs(beforeZ):0
+      );
     }
     const feet=prev.y-1,ground=roof(pos.x,pos.z,feet-ORIGIN.y+.3);
     if(vel.y<=0&&feet>=ground-.38&&pos.y<=ground+1){
