@@ -9,6 +9,9 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const random=(seed)=>()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return (seed>>>0)/4294967296;};
 const CHUNK=110;
 function pixelMaterial(color,seed,variation=27){
+  // Node gameplay tests have no DOM canvas; production browser builds keep
+  // the crisp seeded pixel texture.
+  if(typeof document==='undefined')return new THREE.MeshLambertMaterial({color});
   const rng=random(seed),canvas=document.createElement('canvas');
   canvas.width=32;canvas.height=32;
   const ctx=canvas.getContext('2d');
