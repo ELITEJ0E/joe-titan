@@ -5,6 +5,7 @@ import {applyDirectionalGasBoost} from './odm-gas-propulsion.js';
 import {evaluateODMCollision} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
+import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 
@@ -148,7 +149,7 @@ export function createPlayer(scene,world,camera){
   const cameraAim=V(0,0,0);
   const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grabbed:false,grabEscape:0,grounded:true,
     hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false,
-    flightClock:0,lastGearAt:-Infinity,lastImpactAt:-Infinity,impactFeedback:0};
+    flightClock:0,lastGearAt:-Infinity,lastImpactAt:-Infinity,impactFeedback:0,combat:createScoutAttackState()};
   camera.position.set(9,5,3);
   const heading=()=>V(-Math.sin(state.yaw),0,-Math.cos(state.yaw));
   const viewDirection=()=>V(-Math.sin(state.yaw)*Math.cos(state.pitch),Math.sin(state.pitch),-Math.cos(state.yaw)*Math.cos(state.pitch));
@@ -179,6 +180,7 @@ export function createPlayer(scene,world,camera){
     state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.blades=8;state.grabbed=false;state.grabEscape=0;state.grounded=true;state.aspect=null;form.visible=false;
     state.yaw=0;state.pitch=-.07;state.distance=0;state.speed=0;state.bank=0;state.boost=false;
     state.flightClock=0;state.lastGearAt=-Infinity;state.lastImpactAt=-Infinity;state.impactFeedback=0;
+    resetScoutAttack(state.combat);
     release(0);release(1);model.root.position.copy(state.position);model.root.rotation.set(0,0,0);model.tilt.rotation.set(0,0,0);
     cameraAim.copy(state.position).add(V(0,.9,0));
     camera.position.copy(state.position).add(V(1.15,3.86,11.57));updateCamera(1,true);
@@ -198,6 +200,8 @@ export function createPlayer(scene,world,camera){
     }
     state.flightClock+=dt;
     state.impactFeedback=Math.max(0,state.impactFeedback-dt);
+    const buffered=advanceScoutAttack(state.combat,dt,{canStartBuffered:state.blades>0});
+    if(buffered)state.blades=Math.max(0,state.blades-1);
     const prev=state.position.clone();let forward=heading(),right=V(-forward.z,0,forward.x);
     let wish=V(0,0,0);
     if(input.keys.has('KeyW'))wish.add(forward);
@@ -271,7 +275,8 @@ export function createPlayer(scene,world,camera){
     }
     if(!ensureValid())return;
     state.speed=Math.hypot(state.velocity.x,state.velocity.y,state.velocity.z);
-    state.attackTimer=Math.max(0,state.attackTimer-dt);
+    const sequence=state.combat.kind==='idle'?null:SCOUT_ATTACK_TIMING[state.combat.kind];
+    state.attackTimer=sequence?Math.max(0,sequence.windup+sequence.strike+sequence.recover-state.combat.elapsed):0;
     state.distance+=state.position.distanceTo(prev);
     // Banking and sprint cycles animate the procedural player without borrowed character assets.
     const flatSpeed=Math.hypot(state.velocity.x,state.velocity.z);
@@ -295,7 +300,14 @@ export function createPlayer(scene,world,camera){
     model.tilt.rotation.x=mix(model.tilt.rotation.x,pose.pitch,1-Math.exp(-dt*7));
     const walk=state.grounded?Math.sin(time*flatSpeed*.92)*clamp(flatSpeed/9,0,1):.28;
     const aerialPose=!state.grounded?clamp(flatSpeed/45,0,1):0;
-    const slash=state.attackTimer>0?Math.sin(Math.PI*(1-state.attackTimer/.32)):0;
+    const action=state.combat,progress=scoutAttackProgress(action);
+    const attackEntry=action.kind==='idle'?null:SCOUT_ATTACK_TIMING[action.kind];
+    const sweep=action.phase==='strike'&&attackEntry
+      ?cubicEaseOut((action.elapsed-attackEntry.windup)/attackEntry.strike):0;
+    const slash=action.kind==='slash'?(action.phase==='strike'?Math.sin(Math.PI*sweep):action.phase==='windup'?.25:0):0;
+    const spinning=action.kind==='spin';
+    // Visual spin is local to the pilot; neither camera yaw nor hook physics rotates.
+    model.tilt.rotation.y=spinning?progress*Math.PI*8:0;
     const flying=!state.grounded;
     for(let i=0;i<2;i++){
       const side=i===0?-1:1,legWalk=side*walk*.72;
@@ -303,8 +315,8 @@ export function createPlayer(scene,world,camera){
       smoothBone(model.legs[i],legAngle,0,side*(flying?.12:0),dt,16);
       smoothBone(model.knees[i],flying?.28+clamp(-legAngle,0,.23):Math.max(0,legWalk)*.19,0,0,dt,14);
       const reach=state.hooks[i]?-.92:(flying?-.6:-side*walk*.36);
-      const slashArc=slash*(i===0?-.6:.78);
-      smoothBone(model.arms[i],reach+slashArc,side*slash*.22,side*.09,dt,18);
+      const slashArc=slash*(i===0?-.6:.78)+(spinning?(i===0?-.9:.9):0);
+      smoothBone(model.arms[i],reach+slashArc,side*slash*.22+(spinning?side*.20:0),side*(spinning?.55:.09),dt,action.phase==='strike'?45:18);
       smoothBone(model.elbows[i],state.hooks[i]?-.25:flying?-.32:-.14,0,side*slash*.18,dt,17);
       model.blades[i].visible=state.blades>0||state.attackTimer>0;
     }
@@ -343,9 +355,19 @@ export function createPlayer(scene,world,camera){
   function takeDamage(amount){const reduced=amount*(1-(state.aspect?.armor||0));state.health=Math.max(0,state.health-reduced);if(state.health===0){reset();return {downed:true,amount:reduced};}return {downed:false,amount:reduced};}
   function heal(amount){state.health=clamp(state.health+amount,0,100);}
   function refillGas(amount){state.gas=clamp(state.gas+amount,0,100);}
-  function attack(){if(state.attackTimer>0||state.blades<=0)return false;state.attackTimer=.32;state.blades--;return true;}
+  function attack(){
+    if(state.blades<=0||state.grabbed)return false;
+    if(!beginScoutAttack(state.combat,'slash'))return false;
+    state.blades--;state.attackTimer=.3;return true;
+  }
+  function spin(){
+    if(state.blades<=0||state.grabbed)return false;
+    if(!beginScoutAttack(state.combat,'spin'))return false;
+    state.blades--;state.attackTimer=.6;return true;
+  }
+  function consumeAttackHit(){return consumeScoutHit(state.combat);}
   function refillBlades(amount){state.blades=clamp(state.blades+amount,0,8);}
-  function grab(){if(state.grabbed)return false;state.grabbed=true;state.grabEscape=0;state.velocity.set(0,0,0);release(0);release(1);return true;}
+  function grab(){if(state.grabbed)return false;resetScoutAttack(state.combat);state.grabbed=true;state.grabEscape=0;state.velocity.set(0,0,0);release(0);release(1);return true;}
   function escapeGrab(){if(!state.grabbed)return {active:false,remaining:0};state.grabEscape++;
     if(state.grabEscape>=7){state.grabbed=false;state.grabEscape=0;state.velocity.y=3;return {active:false,remaining:0};}
     return {active:true,remaining:7-state.grabEscape};}
@@ -370,7 +392,11 @@ export function createPlayer(scene,world,camera){
     camera.lookAt(cameraAim);
     // Light roll echoes the pilot's sideways banking without disorienting
     // the player or moving the actual aim ray off the crosshair.
-    if(!state.firstPerson)camera.rotateZ(clamp(state.bank*.095,-.046,.046));
+    if(!state.firstPerson){
+      const trauma=state.impactFeedback*state.impactFeedback;
+      const shake=Math.sin(state.flightClock*83)*trauma*.024;
+      camera.rotateZ(clamp(state.bank*.095+shake,-.07,.07));
+    }
     const movementFov=clamp((state.speed-9)*.42,0,25);
     const targetFov=72+movementFov+(state.boost?5:0)+(state.hooks.some(Boolean)&&state.speed>15?2:0);
     const nextFov=mix(camera.fov,targetFov,1-Math.exp(-dt*5));
@@ -378,5 +404,5 @@ export function createPlayer(scene,world,camera){
     model.root.visible=!state.firstPerson;
   }
   reset();
-  return {...state,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,viewDirection,get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){state.firstPerson=v;}};
+  return {...state,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,spin,consumeAttackHit,viewDirection,get combat(){return state.combat;},get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){state.firstPerson=v;}};
 }
