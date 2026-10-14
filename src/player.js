@@ -278,6 +278,9 @@ export function createPlayer(scene,world,camera){
     const lookPoint=state.firstPerson?camera.position.clone().add(dir):aim.clone().addScaledVector(dir,6.5);
     cameraAim.lerp(lookPoint,snap?1:1-Math.exp(-dt*(state.firstPerson?19:11)));
     camera.lookAt(cameraAim);
+    // Light roll echoes the pilot's sideways banking without disorienting
+    // the player or moving the actual aim ray off the crosshair.
+    if(!state.firstPerson)camera.rotateZ(clamp(state.bank*.095,-.046,.046));
     const targetFov=state.speed>20?72+clamp((state.speed-20)*.16,0,10):72;
     const nextFov=mix(camera.fov,targetFov,1-Math.exp(-dt*3));
     if(Math.abs(nextFov-camera.fov)>.002){camera.fov=nextFov;camera.updateProjectionMatrix();}
