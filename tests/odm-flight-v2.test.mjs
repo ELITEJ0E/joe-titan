@@ -12,7 +12,7 @@ test('hook engagement immediately pulls toward reticle anchor without requiring 
   const consumed=applyODMMotor(position,velocity,hooks,.02,{gas:100});
   assert.ok(velocity.y>0&&velocity.z<0,'winch should pull toward target on engagement');
   assert.equal(velocity.x,originalSide,'preserve tangential swing momentum');
-  assert.ok(hooks[0].length<50,'automatically take up cable slack');
+  assert.ok(hooks[0].length<position.distanceTo(hooks[0].point),'automatically take up cable slack');
   assert.ok(consumed>0);
 });
 
