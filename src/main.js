@@ -259,6 +259,10 @@ function attachEvents(){
     if(event.code==='KeyH'&&started&&!finished){if(document.pointerLockElement===canvas)document.exitPointerLock();halt();return;}
     if(!started||paused||finished)return;
     if(document.pointerLockElement!==canvas&&document.activeElement!==canvas)return;
+    if(player.grabbed&&(event.code==='KeyF'||event.code==='Space')){
+      if(!event.repeat){const escape=player.escapeGrab();showToast(escape.active?'ESCAPE THE GRAB · '+escape.remaining+' INPUTS':'GRAB BROKEN · KEEP MOVING');}
+      return;
+    }
     if(!input.keys.has(event.code)){
       if(event.code==='Space'&&player.grounded)input.jumpQueued=true;
       if(event.code==='KeyQ'){if(player.fire(0))playBeep();}
@@ -380,7 +384,8 @@ function loop(ms){
       if(physicsTick%12===0)multiplayer?.update(player,gameTime);
       const aspectUpdate=updateAspect(aspectState,PHYSICS_STEP);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
       // AI + enemy pose updates at 48 Hz save CPU on dense voxel worlds.
-      const danger=physicsTick%5===0?enemies.update(PHYSICS_STEP*5,player.position,gameTime):{damage:0};if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
+      const danger=physicsTick%5===0?enemies.update(PHYSICS_STEP*5,player.position,gameTime):{damage:0};if(danger.grab&&player.grab())showToast('TITAN GRAB · TAP F OR SPACE 7 TIMES');
+      if(danger.damage&&!player.grabbed){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
       if(physicsTick%2===0)ranged?.update(PHYSICS_STEP*2);
       if(physicsTick%8===0){
         const pickup=supplies?.update(PHYSICS_STEP*8,gameTime,player);
