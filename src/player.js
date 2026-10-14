@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
 import {applyODMMotor,applyReferenceAirDrag,ODM_TUNING} from './odm-motor.js';
-import {gasThrustDirection,allowBoostCablePayout} from './odm-gas-propulsion.js';
+import {applyGazeGasBoost} from './odm-gas-propulsion.js';
 import {impactDamage} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
@@ -198,11 +198,12 @@ export function createPlayer(scene,world,camera){
     input.jumpQueued=false;
     if(input.keys.has('Space')&&!state.grounded&&state.gas>0){
       const aim=viewDirection();
-      // Gas is a free directional thruster: look where you want to fly.
-      // WASD provides a gentle sideways correction, not a competing direction.
-      const thrust=gasThrustDirection(aim,wish);
-      state.velocity.addScaledVector(thrust,ODM_TUNING.boost*dt*(state.aspect?.boost||1));
-      state.velocity.y+=ODM_TUNING.gravity*ODM_TUNING.boostVerticalGravity*dt;
+      // REA hypothesis: gaze-directed gas is additive to anchor pull.
+      // WASD continues to steer via independent air acceleration only.
+      applyGazeGasBoost(state.velocity,aim,dt,{
+        acceleration:ODM_TUNING.boost,gravity:ODM_TUNING.gravity,
+        liftFactor:ODM_TUNING.boostVerticalGravity,multiplier:state.aspect?.boost||1
+      });
       state.gas=Math.max(0,state.gas-ODM_TUNING.gasBoost*dt);state.boost=true;
     }else state.boost=false;
     if(input.keys.has('KeyG')&&state.gas>0){
@@ -222,12 +223,8 @@ export function createPlayer(scene,world,camera){
     state.velocity.y-=ODM_TUNING.gravity*dt;
     if(!state.grounded)applyReferenceAirDrag(state.velocity,dt);
     if(state.velocity.length()>ODM_TUNING.maxSpeed*(state.aspect?.speed||1))state.velocity.multiplyScalar(ODM_TUNING.maxSpeed*(state.aspect?.speed||1)/state.velocity.length());
-    // The high-speed jet must not vanish against an already-taut cable:
-    // while gas is firing let the reel feed cable in the direction of thrust.
-    // This keeps a real rope constraint and never moves the hook itself.
-    allowBoostCablePayout(state.position,state.velocity,state.hooks,dt,{
-      boosting:state.boost,gas:state.gas
-    });
+    // Reference-style ropes do not pay out during boost. A taut rope
+    // removes outward radial speed, preserving tangent/look-directed motion.
     state.position.addScaledVector(state.velocity,dt);
     // Symmetric dual-cable solve: preserve velocity along each cable tangent.
     solveTetherConstraints(state.position,state.velocity,state.hooks);
