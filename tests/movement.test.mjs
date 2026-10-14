@@ -6,7 +6,7 @@ import {resolveWorldCollision} from '../src/collision.js';
 
 function setup(colliders=[]) {
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(72,1,.15,1600);
-  const world={resolveCollision:(p,prev,v)=>resolveWorldCollision(colliders,p,prev,v),grappleRay:(origin,dir)=>origin.clone().addScaledVector(dir,45)};
+  const world={resolveCollision:(p,prev,v)=>resolveWorldCollision(colliders,p,prev,v),grappleRay:(origin,dir,maxDist=125)=>maxDist>=45?origin.clone().addScaledVector(dir,45):null};
   return {player:createPlayer(scene,world,camera),camera,world,input:{keys:new Set(),jumpQueued:false}};
 }
 function finite(player,camera) {
