@@ -16,6 +16,7 @@ const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},look:{x:0,y:
 let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer;
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
 let hadPointerLock=false,practice=false,missionMode='course',debugVisible=false,lastRecovery=0;
+let hookRetryClock=0;
 const TOTAL=6;
 let missionRecords;
 try{missionRecords=readMissionRecords(localStorage);}catch{missionRecords=readMissionRecords(null);}
@@ -115,9 +116,11 @@ function activateSelectedAspect(){
 }
 function bladeStrike(){
   if(!player.attack())return;
-  const flightBonus=Math.min(16,Math.max(0,player.speed-12)*.32);
+  const alignment=player.speed>1?Math.max(0,player.velocity.clone().normalize().dot(player.viewDirection())):0;
+  const flightBonus=Math.min(18,Math.max(0,player.speed-14)*.36)*(.5+.5*alignment);
   const damage=(player.aspect?.effect==='impact'?42:22)+flightBonus;
-  const result=enemies.strike(camera.position,player.viewDirection(),damage);
+  const origin=player.position.clone().add(new THREE.Vector3(0,1.35,0));
+  const result=enemies.strike(origin,player.viewDirection(),damage);
   if(result.hit)showToast(result.defeated?'RIFTBORN DISPERSED':'WEAK POINT STRIKE');
   else showToast('BLADE MISSED · AIM FOR THE GLOWING NAPE');
 }
@@ -131,6 +134,8 @@ function savePhoto(){
   },'image/png');
 }
 function mobileKey(code,pressed){if(pressed)input.keys.add(code);else input.keys.delete(code);}
+function hookHeld(index){return index===0?(input.mouse.left||input.keys.has('KeyQ')):(input.mouse.right||input.keys.has('KeyE'));}
+function releaseUnheld(index){if(!hookHeld(index))player?.release(index);}
 function setupTouchStick(id,type){
   const stick=$(id);if(!stick)return;
   const end=(event)=>{
@@ -212,8 +217,8 @@ function attachEvents(){
     else if(event.button===2){input.mouse.right=true;if(player.fire(1))playBeep();}
   });
   document.addEventListener('mouseup',(event)=>{
-    if(event.button===0){input.mouse.left=false;player.release(0);}
-    if(event.button===2){input.mouse.right=false;player.release(1);}
+    if(event.button===0){input.mouse.left=false;releaseUnheld(0);}
+    if(event.button===2){input.mouse.right=false;releaseUnheld(1);}
   });
   document.addEventListener('keydown',(event)=>{
     if(started&&!paused&&!finished&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code))event.preventDefault();
@@ -238,8 +243,8 @@ function attachEvents(){
   });
   document.addEventListener('keyup',(event)=>{
     input.keys.delete(event.code);
-    if(event.code==='KeyQ')player?.release(0);
-    if(event.code==='KeyE')player?.release(1);
+    if(event.code==='KeyQ')releaseUnheld(0);
+    if(event.code==='KeyE')releaseUnheld(1);
   });
 }
 function completeMission(success=true){
@@ -296,9 +301,12 @@ function hudUpdate(){
     $('beaconDistance').textContent=`${Math.max(0,90-elapsed).toFixed(0)} SEC`;$('checkpointNumber').textContent='HOLD';
     $('missionText').textContent='Last Light · Survive the Riftborn assault';
   }else{$('beaconDistance').textContent='--';$('missionText').textContent='Free Flight · Explore '+(world.style==='minecraft-world'?'Shiganshina':'Asterfell');}
-  $('reticleText').textContent=l&&r?'DUAL ANCHOR LOCK':l?'LEFT CABLE ATTACHED':r?'RIGHT CABLE ATTACHED':'HOLD LMB / RMB TO GRAPPLE';
+  $('reticleText').textContent=l&&r?'DUAL HOOKS · SWING / REEL':l?'LEFT HOOK · RIGHT READY':r?'RIGHT HOOK · LEFT READY':'LMB / RMB OR Q / E TO GRAPPLE';
   if(!l&&!r){const target=player.target(0);$('reticle').classList.toggle('available',!!target);$('reticleText').textContent=target?`ANCHOR READY · ${Math.round(target.distanceTo(player.position))} M`:'NO ANCHOR IN RANGE';}
-  else $('reticle').classList.remove('available');
+  else {const freeSide=l?1:0;const suggestion=l&&r?null:player.target(freeSide);
+    $('reticle').classList.toggle('available',!!suggestion);
+    if(suggestion)$('reticleText').textContent=`${l?'RIGHT':'LEFT'} ANCHOR READY · ${Math.round(suggestion.distanceTo(player.position))} M`;
+  }
   $('trialButton').classList.toggle('hidden',missionMode!=='free');
   $('timer').parentElement.previousElementSibling.textContent=missionMode==='survival'?'TIME TO HOLD':'ELAPSED';
   const selected=ASPECTS[aspectState.selected],active=aspectState.active;
@@ -324,6 +332,13 @@ function loop(ms){
       player.pitch+=(Number(input.keys.has('ArrowUp'))-Number(input.keys.has('ArrowDown')))*.013;
       player.yaw-=mobileInput.look.x*.022;
       player.pitch-=mobileInput.look.y*.016;
+      // Holding a missed hook retries as the reticle moves onto a building;
+      // simultaneous keyboard + mouse binds remain independently attached.
+      hookRetryClock-=.01;
+      if(hookRetryClock<=0){
+        for(let i=0;i<2;i++)if(hookHeld(i)&&!player.hooks[i]&&player.fire(i))playBeep();
+        hookRetryClock=.10;
+      }
       player.update(1/100,input,gameTime);
       multiplayer?.update(player,gameTime);
       const aspectUpdate=updateAspect(aspectState,1/100);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
