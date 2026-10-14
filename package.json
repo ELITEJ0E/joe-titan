@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "verify": "node tests/verify.mjs && node --test tests/movement.test.mjs tests/combat.test.mjs tests/odm-physics.test.mjs tests/voxel-city.test.mjs"
+    "verify": "node tests/verify.mjs && node --test tests/movement.test.mjs tests/combat.test.mjs tests/odm-physics.test.mjs tests/voxel-city.test.mjs && node --test tests/odm-targeting.test.mjs"
   },
   "dependencies": {
     "peerjs": "^1.5.5",
