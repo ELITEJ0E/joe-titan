@@ -27,7 +27,7 @@
     <header class="topbar">
       <div class="brand"><span class="brand-icon">✦</span><div class="brand-type"><strong>JOE TITAN</strong><small>SKYLINE TRIALS / BUILD 0.6</small></div></div>
       <div class="mission"><small>CURRENT OBJECTIVE</small><strong id="missionText">Reach the golden signal beacon</strong></div><div class="network-badge"><small>CO-OP LINK</small><strong id="networkStatus">OFFLINE</strong><span id="networkCount">0 PILOTS</span></div>
-      <div class="hud-right"><span class="city-label"><span class="city-dot"></span> ASTERFELL · INNER WARD</span><button class="tiny-btn" id="helpButton" type="button">CONTROLS <span>H</span></button></div>
+      <div class="hud-right"><span class="city-label"><span class="city-dot"></span> ASTERFELL · INNER WARD</span><button class="tiny-btn graphics-switch" id="qualityButton" type="button" aria-label="Toggle graphics quality">VISUALS: PERFORMANCE · K</button><button class="tiny-btn" id="helpButton" type="button">CONTROLS <span>H</span></button></div>
     </header>
     <div class="horizon"><span id="bearingLabel">N</span><span class="line-tick"></span><span>NE</span><span class="line-tick"></span><span>E</span></div>
     <div id="reticle" class="reticle"><div class="reticle-ring"></div><div class="reticle-center"></div><span id="reticleText" class="reticle-label">READY TO LAUNCH</span></div>
@@ -53,6 +53,7 @@
       <button id="startButton" class="start" type="button">DEPLOY SKYLINE CIRCUIT <span>↗</span></button>
       <button id="missionSelectButton" class="secondary" type="button">OPEN OPERATIONS BOARD <span>↗</span></button>
       <button id="practiceButton" class="secondary" type="button">FREE FLIGHT PRACTICE <span>↗</span></button>
+      <button id="graphicsMenuButton" class="secondary graphics-menu-button" type="button">GRAPHICS: PERFORMANCE (K TO SWITCH) ↗</button>
       <section class="multiplayer-lobby" aria-label="Multiplayer lobby"><div class="lobby-heading"><span>FREE CO-OP LINK</span><small>PEER-TO-PEER · NO ACCOUNT</small></div><div class="lobby-actions"><button id="createRoomButton" class="lobby-button" type="button">CREATE ROOM</button><input id="roomCodeInput" type="text" inputmode="text" maxlength="64" autocomplete="off" placeholder="PASTE ROOM CODE" aria-label="Room code"/><button id="joinRoomButton" class="lobby-button" type="button">JOIN</button></div><p id="roomMessage" class="room-message">Create a room, then share its code with a friend.</p></section>
       <div id="startMessage" class="hint">Mouse + keyboard · Drag or arrow keys to aim if mouse capture is unavailable</div>
       <div class="menu-controls"><div><span>LMB / RMB</span> Grappling anchors</div><div><span>WASD</span> Steering</div><div><span>SPACE</span> Jump and gas boost</div><div><span>SHIFT</span> Reel both cables</div><div><span>ESC</span> Pause</div></div>
