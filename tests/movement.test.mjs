@@ -29,7 +29,7 @@ test('jump, boost, landing and gas refill remain stable',()=>{
 });
 test('dual hooks reel, release independently and preserve finite motion',()=>{
   const s=setup();assert.ok(s.player.fire(0));assert.ok(s.player.fire(1));assert.deepEqual(s.player.hooks[0].point.toArray(),s.player.hooks[1].point.toArray());
-  const length=s.player.hooks[0].length;s.input.keys.add('ShiftLeft');s.input.keys.add('Space');step(s,250);
+  const length=s.player.hooks[0].length;s.input.jumpQueued=true;s.input.keys.add('ShiftLeft');s.input.keys.add('Space');step(s,250);
   assert.ok(s.player.hooks[0].length<length);assert.ok(s.player.gas<100);
   assert.ok(s.player.hooks[0].length+s.player.hooks[1].length>=s.player.hooks[0].point.distanceTo(s.player.hooks[1].point),'dual ropes must remain geometrically feasible');
   s.player.release(0);assert.equal(s.player.hooks[0],null);assert.ok(s.player.hooks[1]);
