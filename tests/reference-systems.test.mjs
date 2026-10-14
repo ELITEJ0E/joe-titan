@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {REFERENCE_COMBAT,createBullet,stepBullet,parryBullet,pickupAvailable,encodeScoutState,segmentNapeHealth,napeHit} from '../src/reference-combat.js';
 import {createEnemySimulation,strikeWeakPoint} from '../src/enemies.js';
+import {createPlayer} from '../src/player.js';
+import {BOULDER,createTitanProjectiles} from '../src/titan-projectiles.js';
+import {createSupplyDrops} from '../src/supplies.js';
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 test('REA ballistics: bullet speed, gravity, life and cooldown',()=>{
   assert.equal(REFERENCE_COMBAT.bulletSpeed,110);
@@ -55,4 +58,50 @@ test('new shifter Titan variants have multiple nape segments',()=>{
  const deep=strikeWeakPoint(e,p,d,45,10);
  assert.equal(deep.kind,'napecrack');
  assert.equal(e.napeHP,2);
+});
+
+test('armored Titan grab requires seven unique escape inputs and freezes pilot',()=>{
+ const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera();
+ const world={resolveCollision:()=>true,grappleRay:()=>null,spawnPoint:V(0,1,0)};
+ const player=createPlayer(scene,world,camera);
+ assert.equal(player.grab(),true);
+ const p=player.position.clone();
+ player.update(.05,{keys:new Set(['KeyW']),jumpQueued:false},0);
+ assert.deepEqual(player.position.toArray(),p.toArray());
+ for(let i=1;i<7;i++){
+   const result=player.escapeGrab();
+   assert.equal(result.active,true);
+   assert.equal(result.remaining,7-i);
+ }
+ assert.equal(player.escapeGrab().active,false);
+ assert.equal(player.grabbed,false);
+});
+test('Armored attack initiates zero-damage grab',()=>{
+ const sim=createEnemySimulation([{type:'armored',position:[0,0,0],patrol:[0,0,0]}]);
+ const result=sim.update(.1,V(1,1,1));
+ assert.equal(result.grab,true);
+ assert.equal(result.damage,0);
+});
+test('Beast boulder launches at measured speed and disappears on world collision',()=>{
+ const scene=new THREE.Scene(),world={grappleRay:()=>null};
+ const manager=createTitanProjectiles(scene,world);
+ assert.equal(BOULDER.speed,22);
+ assert.equal(BOULDER.gravity,4);
+ assert.equal(manager.throwBoulder(V(0,15,0),V(30,1,0)),true);
+ assert.equal(manager.count,1);
+ manager.update(.1,V(100,1,100));
+ assert.equal(manager.count,1);
+ manager.reset();
+ assert.equal(manager.count,0);
+});
+test('collectible supplies grant source-measured amounts and two blade charges',()=>{
+ const scene=new THREE.Scene();
+ const supplies=createSupplyDrops(scene,{terrainHeight:()=>0});
+ const hit=supplies.drops.find(d=>d.type==='blades');
+ const increments=[];
+ const player={position:hit.position.clone(),refillGas:(n)=>increments.push(['gas',n]),
+   heal:(n)=>increments.push(['health',n]),refillBlades:(n)=>increments.push(['blades',n])};
+ assert.equal(supplies.update(.05,0,player),'blades');
+ assert.deepEqual(increments,[['blades',2]]);
+ assert.equal(supplies.update(.05,.05,player),null);
 });
