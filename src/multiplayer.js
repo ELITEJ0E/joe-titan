@@ -1,5 +1,6 @@
 import {Peer} from 'peerjs';
 import * as THREE from 'three';
+import {encodeScoutState} from './reference-combat.js';
 
 const COLORS=['#8fe8ff','#f4bd88','#c6a7ff','#9be6a0'];
 const ICE_SERVERS=[
@@ -58,7 +59,9 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
     connection.on('open',()=>{clearTimeout(timeout);connection.send({type:'hello',name:'JOE TITAN pilot'});setStatus('CONNECTED',`${connections.size} pilot${connections.size===1?'':'s'} online`);onCount(connections.size);});
     connection.on('data',(message)=>{
       if(!message||message.type!=='state')return;
-      const state={x:Number(message.state?.x)||0,y:Number(message.state?.y)||0,z:Number(message.state?.z)||0,yaw:Number(message.state?.yaw)||0,aspect:String(message.state?.aspect||'')};
+      const encoded=message.state?.physics;
+      const p=Array.isArray(encoded?.p)?encoded.p:null;
+      const state={x:Number(p?.[0]??message.state?.x)||0,y:Number(p?.[1]??message.state?.y)||0,z:Number(p?.[2]??message.state?.z)||0,yaw:Number(message.state?.yaw)||0,aspect:String(message.state?.aspect||''),physics:encoded};
       remoteStates.set(connection.peer,state);
       let avatar=avatars.get(connection.peer);if(!avatar){avatar=makeRemoteAvatar(scene,avatars.size);avatars.set(connection.peer,avatar);}
       avatar.visible=true;avatar.position.lerp(new THREE.Vector3(state.x,state.y,state.z),.35);avatar.rotation.y=state.yaw;
@@ -72,7 +75,8 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
     start:ensurePeer,
     createRoom(){ensurePeer();return peerId;},
     joinRoom(room){ensurePeer();const code=String(room||'').replace(/\s+/g,'').trim();if(!code)return false;if(!peerId){pendingRoom=code;return true;}const connection=peer.connect(code,{reliable:true,serialization:'json'});bindConnection(connection);return true;},
-    update(state,time){if(!peerId||time-lastBroadcast<.08)return;lastBroadcast=time;const packet={type:'state',state:{x:state.position.x,y:state.position.y,z:state.position.z,yaw:state.yaw,aspect:state.aspect?.name||''}};connections.forEach((connection)=>{if(connection.open)connection.send(packet);});},
+    update(state,time){if(!peerId||time-lastBroadcast<.08)return;lastBroadcast=time;const physics=encodeScoutState(state);
+      const packet={type:'state',state:{x:physics.p[0],y:physics.p[1],z:physics.p[2],yaw:state.yaw,aspect:state.aspect?.name||'',physics}};connections.forEach((connection)=>{if(connection.open)connection.send(packet);});},
     roomCode(){return peerId;},
     playerCount(){return connections.size;},
     destroy(){connections.forEach((connection)=>connection.close());peer?.destroy();peer=null;started=false;}
