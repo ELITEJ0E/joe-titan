@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {findSafeMinecraftSpawn} from './minecraft-spawn.js';
 // A Minecraft Java Anvil world baked into a compact, greedy-meshed JTVX archive.
 // The archive is user-supplied and optional: no copyrighted map ships in source.
 const ORIGIN=new THREE.Vector3(-152,-10,-146);
@@ -115,6 +116,12 @@ function installVoxelPhysics(world,asset){
     return null;
   };
   world.resolveCollision=(pos,prev,vel)=>{
+    // If an outdated save or a geometry edge starts inside a solid wall,
+    // recover to the verified street spawn instead of endlessly reverting
+    // to the same trapped position.
+    if(solid(prev.x,prev.y-.2,prev.z)){
+      pos.copy(world.spawnPoint);vel.set(0,0,0);return true;
+    }
     const torso=pos.y-.2;
     if(solid(pos.x,torso,pos.z)){
       if(!solid(prev.x,torso,pos.z)){pos.x=prev.x;vel.x=0;}
@@ -178,7 +185,13 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-180;sun.shadow.camera.right=180;
   sun.shadow.camera.top=180;sun.shadow.camera.bottom=-180;scene.add(sun);
   const sectors=createSectors(scene,asset,voxelMaterial(atlasTexture(asset.colors)));
-  installVoxelPhysics(world,asset);installMissions(scene,world);
+  installVoxelPhysics(world,asset);
+  // The former fixed (-30,19,29) point was inside authored masonry.
+  // Choose a genuinely outdoor, clear-headed street using the loaded voxels.
+  const safeSpawn=findSafeMinecraftSpawn(asset,ORIGIN);
+  if(!safeSpawn)throw Error('No collision-safe Shiganshina street spawn found');
+  world.spawnPoint.set(safeSpawn.x,safeSpawn.y,safeSpawn.z);
+  installMissions(scene,world);
   world.stats={quads:asset.count,sectors,blocks:asset.voxel.length};
   return world;
 }
