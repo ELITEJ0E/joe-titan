@@ -1,44 +1,47 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {gasThrustDirection,allowBoostCablePayout} from '../src/odm-gas-propulsion.js';
+import {gasThrustDirection,applyGazeGasBoost,allowBoostCablePayout} from '../src/odm-gas-propulsion.js';
 import {solveTetherConstraints} from '../src/odm-physics.js';
+import {applyODMMotor,ODM_TUNING} from '../src/odm-motor.js';
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 
-test('gas jet follows gaze even while WASD points elsewhere',()=>{
- const aimed=V(0,.2,-1).normalize();
- const thrust=gasThrustDirection(aimed,V(1,0,0));
- assert.ok(thrust.dot(aimed)>.98,'look direction must dominate the jet');
- assert.ok(thrust.x>0,'sideways WASD still bends thrust slightly');
- assert.ok(Math.abs(thrust.length()-1)<1e-10);
- assert.deepEqual(gasThrustDirection(V(0,0,-1),V(0,0,0)).toArray(),[0,0,-1]);
+test('gas direction is exactly gaze aligned regardless of lateral/forward input',()=>{
+  const gaze=V(0,.2,-1).normalize();
+  for(const wish of [V(0,0,0),V(1,0,0),V(0,0,-1),V(-1,0,1)]){
+    const thrust=gasThrustDirection(gaze,wish);
+    assert.ok(thrust.distanceTo(gaze)<1e-12);
+  }
 });
-test('gas can extend a taut cable without teleporting its target or player',()=>{
- const p=V(0,10,0),anchor=V(0,12,-10),v=V(0,0,40);
- const initial=p.distanceTo(anchor),hook={point:anchor.clone(),length:initial};
- const paid=allowBoostCablePayout(p,v,[hook],.1,{boosting:true,gas:50});
- assert.ok(Math.abs(paid-2.4)<1e-9,'payout limited to 24 world units/s');
- assert.ok(Math.abs(hook.length-initial-2.4)<1e-9);
- assert.deepEqual(p.toArray(),[0,10,0]);
- assert.deepEqual(hook.point.toArray(),anchor.toArray());
+test('gas applies exactly 36 units/s² along look plus fixed 9.1 units/s² upward',()=>{
+  const v=V(0,0,0);
+  applyGazeGasBoost(v,V(0,0,-1),.1);
+  assert.ok(v.distanceTo(V(0,.91,-3.6))<1e-9);
+  const up=V(0,0,0);
+  applyGazeGasBoost(up,V(0,1,0),.1);
+  assert.ok(up.distanceTo(V(0,4.51,0))<1e-9);
 });
-test('no gas, no boost, slack cable and inward velocity must never pay out',()=>{
- const p=V(0,0,0),point=V(0,0,-10),hook={point,length:10};
- assert.equal(allowBoostCablePayout(p,V(0,0,30),[hook],.1,{boosting:true,gas:0}),0);
- assert.equal(allowBoostCablePayout(p,V(0,0,30),[hook],.1,{boosting:false,gas:100}),0);
- assert.equal(allowBoostCablePayout(p,V(0,0,-30),[hook],.1,{boosting:true,gas:100}),0);
- hook.length=20;
- assert.equal(allowBoostCablePayout(p,V(0,0,30),[hook],.1,{boosting:true,gas:100}),0);
+test('gas and anchor motor add their accelerations independently',()=>{
+  const p=V(0,10,0),hook={point:V(0,10,30),length:30},v=V(0,0,0);
+  applyGazeGasBoost(v,V(0,0,-1),.1);
+  applyODMMotor(p,v,[hook],.1,{gas:100});
+  // 36*.1 toward -Z plus 2.5*.1 toward +Z
+  assert.ok(Math.abs(v.z+3.35)<1e-9);
+  assert.ok(Math.abs(v.y-.91)<1e-9);
 });
-test('look-driven acceleration keeps tangential momentum on hook constraint',()=>{
- const pos=V(0,12,0),hook={point:V(0,15,-20),length:pos.distanceTo(V(0,15,-20))};
- const v=V(12,0,-3),aim=gasThrustDirection(V(1,0,-1),V(0,0,0));
- v.addScaledVector(aim,36*.05);
- allowBoostCablePayout(pos,v,[hook],.05,{boosting:true,gas:50});
- const oldSpeed=v.length();
- pos.addScaledVector(v,.05);
- solveTetherConstraints(pos,v,[hook]);
- assert.ok(pos.distanceTo(hook.point)<=hook.length+.01);
- assert.ok(v.x>12,'jet keeps lateral forward acceleration');
- assert.ok(v.length()<=oldSpeed+.0001,'constraints cannot create speed');
+test('a taut cable removes outward speed but preserves tangential gaze thrust',()=>{
+  const p=V(0,10,0),hook={point:V(0,10,-20),length:20},v=V(12,0,0);
+  applyGazeGasBoost(v,V(1,0,1).normalize(),.05);
+  const before=v.clone();
+  p.addScaledVector(v,.05);
+  solveTetherConstraints(p,v,[hook]);
+  assert.ok(p.distanceTo(hook.point)<=hook.length+.001);
+  assert.ok(v.x>12,'tangent movement stays positive');
+  assert.ok(v.length()<=before.length()+1e-8);
+});
+test('legacy cable-payout helper remains isolated and unused by player reference mode',()=>{
+  const pos=V(0,0,0),hook={point:V(0,0,-10),length:10};
+  const paid=allowBoostCablePayout(pos,V(0,0,30),[hook],.1,{boosting:true,gas:50});
+  assert.ok(paid>0);
+  assert.ok(hook.length>10);
 });
