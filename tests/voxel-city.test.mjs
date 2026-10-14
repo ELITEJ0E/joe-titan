@@ -20,6 +20,22 @@ test('voxel city generates batched buildings, walls and six usable beacons',()=>
   assert.equal(world.spawnPoint.y,1);
 });
 
+test('wall crenellations never span the entire city like floating roofs',()=>{
+  const scene=new THREE.Scene();createVoxelWorld(scene);
+  const matrix=new THREE.Matrix4(),position=new THREE.Vector3(),rotation=new THREE.Quaternion(),scale=new THREE.Vector3();
+  let inspected=0;
+  for(const group of scene.children){
+    if(!group.isInstancedMesh||group.name!=='voxel-limestone')continue;
+    for(let i=0;i<group.count;i++){
+      group.getMatrixAt(i,matrix);matrix.decompose(position,rotation,scale);
+      assert.ok(Math.max(scale.x,scale.z)<75,
+        `unexpectedly wide limestone at ${position.x.toFixed(0)},${position.z.toFixed(0)}: ${scale.x.toFixed(0)}x${scale.z.toFixed(0)}`);
+      inspected++;
+    }
+  }
+  assert.ok(inspected>100,'expected detailed fortification stones');
+});
+
 test('voxel roofs accept grapple targeting and landing collisions',()=>{
   const scene=new THREE.Scene(),world=createVoxelWorld(scene);
   const c=world.colliders[0],above=new THREE.Vector3(c.x,c.h+20,c.z);
