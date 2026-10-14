@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {findSafeMinecraftSpawn} from './minecraft-spawn.js';
 import {slideVoxelHorizontal} from './voxel-slide.js';
+import {createShiganshinaVisuals} from './shiganshina-visuals.js';
 // A Minecraft Java Anvil world baked into a compact, greedy-meshed JTVX archive.
 // The archive is user-supplied and optional: no copyrighted map ships in source.
 const ORIGIN=new THREE.Vector3(-152,-10,-146);
@@ -18,37 +19,6 @@ function unpack(buffer){
   const start=24+paletteLen,size=nx*ny*nz;
   if(data.length!==start+size+count*9)throw Error('Truncated Shiganshina map');
   return {nx,ny,nz,count,colors,voxel:data.subarray(start,start+size),quads:new DataView(buffer,start+size,count*9)};
-}
-function atlasTexture(colors){
-  const c=document.createElement('canvas');c.width=256;c.height=128;
-  const ctx=c.getContext('2d'),tile=32;
-  const rand=i=>((Math.imul(i,1664525)+1013904223)>>>0)/4294967296;
-  for(let t=0;t<32;t++){
-    const x=(t%8)*tile,y=(3-Math.floor(t/8))*tile,base=new THREE.Color(colors[t]||'#888888');
-    for(let j=0;j<tile;j+=2)for(let i=0;i<tile;i+=2){
-      const n=rand(t*92771+i*231+j*901);
-      ctx.fillStyle='#'+base.clone().offsetHSL((n-.5)*.016,0,(n-.5)*.085).getHexString();
-      ctx.fillRect(x+i,y+j,2,2);
-    }
-    if([1,2,3,4,5,8,9,10,14,16,26].includes(t)){
-      ctx.fillStyle='rgba(23,17,18,.23)';
-      for(let j=0;j<32;j+=8){ctx.fillRect(x,y+j,32,1);for(let i=j%16?5:0;i<32;i+=11)ctx.fillRect(x+i,y+j,1,8);}
-    }else if([6,7,23].includes(t)){
-      ctx.fillStyle='rgba(38,21,18,.25)';for(let i=0;i<32;i+=6)ctx.fillRect(x+i,y,1,32);
-    }else if(t===11){ctx.fillStyle='rgba(250,250,255,.4)';ctx.fillRect(x+3,y+3,1,26);ctx.fillRect(x+16,y+4,1,24);ctx.fillRect(x+3,y+16,26,1);}
-    else if(t===27){ctx.fillStyle='rgba(255,241,205,.45)';ctx.fillRect(x+5,y+5,22,22);}
-  }
-  const texture=new THREE.CanvasTexture(c);
-  texture.magFilter=THREE.NearestFilter;texture.minFilter=THREE.NearestFilter;texture.colorSpace=THREE.SRGBColorSpace;
-  return texture;
-}
-function voxelMaterial(texture){
-  return new THREE.ShaderMaterial({
-    uniforms:{uAtlas:{value:texture},uFog:{value:new THREE.Color(0xb8b0a8)},uSun:{value:V(-.65,.84,-.32).normalize()}},
-    vertexShader:"attribute float aTile;varying float vTile;varying vec2 vUv;varying vec3 vNormal;varying vec3 vWorld;void main(){vTile=aTile;vUv=uv;vNormal=normalize(mat3(modelMatrix)*normal);vec4 w=modelMatrix*vec4(position,1.0);vWorld=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}",
-    fragmentShader:"uniform sampler2D uAtlas;uniform vec3 uFog;uniform vec3 uSun;varying float vTile;varying vec2 vUv;varying vec3 vNormal;varying vec3 vWorld;void main(){vec2 cell=vec2(mod(vTile,8.0),floor(vTile/8.0));vec2 uvAtlas=(cell+vec2(.018)+fract(vUv+.00001)*.964)/vec2(8.0,4.0);vec3 base=texture2D(uAtlas,uvAtlas).rgb;float light=max(0.0,dot(normalize(vNormal),uSun));float shade=(.60+light*.66)*(vNormal.y>0.9?1.05:vNormal.y<-.9?.48:.92);vec3 lit=base*shade*vec3(1.04,.97,.91);float haze=smoothstep(125.0,285.0,length(cameraPosition-vWorld))*.77;gl_FragColor=vec4(mix(lit,uFog,haze),1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}",
-    side:THREE.FrontSide,toneMapped:true
-  });
 }
 function createSectors(scene,asset,material){
   const bins=new Map(),d=asset.quads;
@@ -177,12 +147,10 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   const asset=unpack(decompressed);
   const world={style:'minecraft-world',spawnPoint:V(-30,19,29),colliders:[],beacons:[],districtRoads:[],grappleMeshes:[],smoke:[],lamps:[],
     landmarks:{cathedral:[0,-14],plaza:[-30,29],citadel:[0,-45],arena:[120,0],market:[40,30],townHall:[0,65],harbour:[90,110],canalZ:-10000}};
-  scene.background=new THREE.Color(0xa9cad8);scene.fog=new THREE.Fog(0xb1b9b2,128,360);
-  scene.add(new THREE.HemisphereLight(0xffead6,0x4f6570,1.8));
-  const sun=new THREE.DirectionalLight(0xffd6ac,2.2);sun.position.set(-115,150,-80);sun.castShadow=true;
-  sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-180;sun.shadow.camera.right=180;
-  sun.shadow.camera.top=180;sun.shadow.camera.bottom=-180;scene.add(sun);
-  const sectors=createSectors(scene,asset,voxelMaterial(atlasTexture(asset.colors)));
+  // The full-detail converted world now shares a configurable, original
+  // Minecraft-shader-inspired light and texture pipeline (no extra geometry).
+  const visuals=createShiganshinaVisuals(scene,asset.colors,'performance');
+  const sectors=createSectors(scene,asset,visuals.material);
   installVoxelPhysics(world,asset);
   // The former fixed (-30,19,29) point was inside authored masonry.
   // Choose a genuinely outdoor, clear-headed street using the loaded voxels.
@@ -190,6 +158,9 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   if(!safeSpawn)throw Error('No collision-safe Shiganshina street spawn found');
   world.spawnPoint.set(safeSpawn.x,safeSpawn.y,safeSpawn.z);
   installMissions(scene,world);
+  const animateMissions=world.animate;
+  world.animate=(time,dt)=>{visuals.animate(time);animateMissions(time,dt);};
+  world.setVisualQuality=visuals.setQuality;
   world.stats={quads:asset.count,sectors,blocks:asset.voxel.length};
   return world;
 }
