@@ -109,7 +109,9 @@ function activateSelectedAspect(){
 }
 function bladeStrike(){
   if(!player.attack())return;
-  const damage=player.aspect?.effect==='impact'?42:22,result=enemies.strike(camera.position,player.viewDirection(),damage);
+  const flightBonus=Math.min(16,Math.max(0,player.speed-12)*.32);
+  const damage=(player.aspect?.effect==='impact'?42:22)+flightBonus;
+  const result=enemies.strike(camera.position,player.viewDirection(),damage);
   if(result.hit)showToast(result.defeated?'RIFTBORN DISPERSED':'WEAK POINT STRIKE');
   else showToast('BLADE MISSED · AIM FOR THE GLOWING NAPE');
 }
