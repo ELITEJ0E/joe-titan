@@ -11,13 +11,14 @@ import {createSupplyDrops} from './supplies.js';
 import {createRangedCombat} from './ranged-combat.js';
 import {createMultiplayer} from './multiplayer.js';
 import {MISSION_MODES,MISSION_RECORDS_KEY,readMissionRecords,recordMission} from './missions.js';
+import {createScoutCutEffects} from './scout-cut-effects.js';
 
 const $=(id)=>document.getElementById(id);
 const canvas=$('game');
 const hud=$('hud'),menu=$('menu'),missionSelect=$('missionSelect'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
 const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},look:{x:0,y:0}};
-let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies,ranged;
+let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies,ranged,cutEffects;
 let visualQuality='performance';
 try{visualQuality=normaliseVisualQuality(localStorage.getItem('joe-titan-graphics'));}catch{}
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
@@ -90,6 +91,7 @@ async function init(){
   graphics=createGraphicsQuality(renderer,scene,camera,world,visualQuality);
   updateGraphicsButtons();
   player=createPlayer(scene,world,camera);
+  cutEffects=createScoutCutEffects(scene);
   enemies=createEnemyManager(scene,world);supplies=createSupplyDrops(scene,world);ranged=createRangedCombat(scene,world,enemies);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
   camera.position.set(115,91,102);camera.lookAt(0,24,-10);
@@ -121,7 +123,7 @@ function halt(){if(!started||finished)return;paused=true;clearInputs();mobileCon
 function startFresh(mode='course'){
   missionMode=MISSION_MODES.some(mission=>mission.id===mode)?mode:'course';
   practice=missionMode!=='course';courseIndex=missionMode==='course'?0:TOTAL;elapsed=0;finished=false;
-  player.reset();enemies.reset();supplies?.reset();ranged?.reset();aspectState=createAspectState();world.setBeaconActive(missionMode==='course'?0:-1);
+  player.reset();enemies.reset();supplies?.reset();ranged?.reset();cutEffects?.clear();aspectState=createAspectState();world.setBeaconActive(missionMode==='course'?0:-1);
   $('checkpointNumber').textContent=missionMode==='course'?'01':missionMode==='hunt'?`${enemies.living()}`:'--';
   $('trialButton').textContent='START SKYLINE CIRCUIT ↗';
   clearInputs();startOrResume();hudUpdate();
@@ -153,10 +155,11 @@ function resolveBladeStrike(kind='slash'){
   const offsets=kind==='spin'?[-Math.PI/2,0,Math.PI/2,Math.PI]:[0];
   for(const angle of offsets){
     const ray=aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),angle);
-    result=enemies.strike(origin,ray,damage);
+    result=enemies.strikeArc(origin,ray,damage,{spin:kind==='spin'});
     if(result.hit)break;
     if(sever.kind!=='limb')sever=enemies.severArm(origin,ray);
   }
+  cutEffects?.cut(origin.clone().addScaledVector(aim,2),aim,{spin:kind==='spin',hit:result.hit});
   if(result.hit)showToast(result.defeated?'RIFTBORN DISPERSED':'WEAK POINT STRIKE');
   else showToast(sever.kind==='limb'?'TITAN ARM SEVERED · ATTACK INTERRUPTED':'BLADE MISSED · AIM FOR THE NAPE OR ARMS');
 }
@@ -276,7 +279,7 @@ function attachEvents(){
     if(!started||paused||finished)return;
     if(document.pointerLockElement!==canvas&&document.activeElement!==canvas)return;
     if(player.grabbed&&(event.code==='KeyF'||event.code==='Space')){
-      if(!event.repeat){const escape=player.escapeGrab();showToast(escape.active?'ESCAPE THE GRAB · '+escape.remaining+' INPUTS':'GRAB BROKEN · KEEP MOVING');}
+      if(!event.repeat){const escape=player.escapeGrab(event.code,gameTime);showToast(escape.active?'ESCAPE THE GRAB · '+escape.remaining+' INPUTS':'GRAB BROKEN · KEEP MOVING');}
       return;
     }
     if(!input.keys.has(event.code)){
@@ -426,6 +429,7 @@ function loop(ms){
     camera.lookAt(0,9,-4);
   }
   world.animate(gameTime,dt);
+  cutEffects?.update(dt);
   multiplayer?.render(dt);
   if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
   if(graphics)graphics.render();else renderer.render(scene,camera);

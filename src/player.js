@@ -6,6 +6,7 @@ import {evaluateODMCollision} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 import {ODM_CABLE_SEGMENTS,writeODMCableCurve} from './odm-cable-visuals.js';
+import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
@@ -148,9 +149,10 @@ export function createPlayer(scene,world,camera){
   const formBody=new THREE.Mesh(new THREE.CapsuleGeometry(.72,2.1,5,10),formMat);formBody.position.y=1.75;form.add(formBody);
   const formCore=new THREE.Mesh(new THREE.SphereGeometry(.34,12,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88}));formCore.position.y=2.7;form.add(formCore);form.visible=false;scene.add(form);
   const cameraAim=V(0,0,0);
-  const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grabbed:false,grabEscape:0,grounded:true,
+  const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grabbed:false,grabEscape:0,grabProgress:createEscapeProgress(),grounded:true,
     hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false,
-    flightClock:0,lastGearAt:-Infinity,lastImpactAt:-Infinity,impactFeedback:0,combat:createScoutAttackState()};
+    flightClock:0,lastGearAt:-Infinity,lastImpactAt:-Infinity,impactFeedback:0,combat:createScoutAttackState(),
+    landingCompression:0,braking:false,hitStun:0};
   camera.position.set(9,5,3);
   const heading=()=>V(-Math.sin(state.yaw),0,-Math.cos(state.yaw));
   const viewDirection=()=>V(-Math.sin(state.yaw)*Math.cos(state.pitch),Math.sin(state.pitch),-Math.cos(state.yaw)*Math.cos(state.pitch));
@@ -178,9 +180,10 @@ export function createPlayer(scene,world,camera){
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
   function reset(){
-    state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.blades=8;state.grabbed=false;state.grabEscape=0;state.grounded=true;state.aspect=null;form.visible=false;
+    state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.blades=8;state.grabbed=false;state.grabEscape=0;state.grabProgress=createEscapeProgress();state.grounded=true;state.aspect=null;form.visible=false;
     state.yaw=0;state.pitch=-.07;state.distance=0;state.speed=0;state.bank=0;state.boost=false;
     state.flightClock=0;state.lastGearAt=-Infinity;state.lastImpactAt=-Infinity;state.impactFeedback=0;
+    state.landingCompression=0;state.braking=false;state.hitStun=0;model.tilt.position.y=0;
     resetScoutAttack(state.combat);
     release(0);release(1);model.root.position.copy(state.position);model.root.rotation.set(0,0,0);model.tilt.rotation.set(0,0,0);
     cameraAim.copy(state.position).add(V(0,.9,0));
@@ -196,11 +199,18 @@ export function createPlayer(scene,world,camera){
     if(!ensureValid()){input.jumpQueued=false;return;}
     if(state.grabbed){
       state.velocity.set(0,0,0);state.speed=0;state.boost=false;
+      for(let i=0;i<2;i++){
+        smoothBone(model.arms[i],.42,0,i===0?-.35:.35,dt,14);
+        smoothBone(model.legs[i],-.22,0,0,dt,12);
+      }
+      smoothBone(model.headRig,-.3,0,0,dt,12);
       input.jumpQueued=false;model.root.position.copy(state.position);
       return;
     }
     state.flightClock+=dt;
     state.impactFeedback=Math.max(0,state.impactFeedback-dt);
+    state.hitStun=Math.max(0,state.hitStun-dt);
+    state.landingCompression*=Math.exp(-dt*12);
     const buffered=advanceScoutAttack(state.combat,dt,{canStartBuffered:state.blades>0});
     if(buffered)state.blades=Math.max(0,state.blades-1);
     const prev=state.position.clone();let forward=heading(),right=V(-forward.z,0,forward.x);
@@ -237,7 +247,8 @@ export function createPlayer(scene,world,camera){
       });
       state.gas=Math.max(0,state.gas-ODM_TUNING.gasBoost*dt);state.boost=true;
     }else state.boost=false;
-    if(input.keys.has('KeyG')&&state.gas>0){
+    state.braking=input.keys.has('KeyG')&&!state.grounded&&state.gas>0;
+    if(state.braking){
       if(state.velocity.y< -2)state.velocity.y+=Math.min(-state.velocity.y-2,ODM_TUNING.brakeVertical*dt);
       if(!activeHooks){
         const k=Math.min(1,ODM_TUNING.brakeHorizontal*dt);
@@ -259,7 +270,9 @@ export function createPlayer(scene,world,camera){
     state.position.addScaledVector(state.velocity,dt);
     // Symmetric dual-cable solve: preserve velocity along each cable tangent.
     solveTetherConstraints(state.position,state.velocity,state.hooks);
+    const wasGrounded=state.grounded,fallSpeed=Math.max(0,-state.velocity.y);
     state.grounded=world.resolveCollision(state.position,prev,state.velocity);
+    if(state.grounded&&!wasGrounded)state.landingCompression=Math.min(.23,Math.max(0,(fallSpeed-5)*.007));
     if(world.lastCollision){
       const collision=evaluateODMCollision(world.lastCollision,{
         gearActive:activeHooks>0,
@@ -293,12 +306,13 @@ export function createPlayer(scene,world,camera){
     });
     state.bank=mix(state.bank,pose.bank,1-Math.exp(-dt*7));
     model.tilt.rotation.z=state.bank;
+    model.tilt.position.y=-state.landingCompression;
     // Flutter cape in proportion to aerodynamic velocity, without touching physics.
     model.capeL.rotation.x=mix(model.capeL.rotation.x,clamp(-state.speed/105,-.66,-.06),1-Math.exp(-dt*5));
     model.capeR.rotation.x=mix(model.capeR.rotation.x,clamp(-state.speed/105,-.66,-.06),1-Math.exp(-dt*5));
     model.capeL.rotation.z=Math.sin(time*6)*.045;
     model.capeR.rotation.z=-Math.sin(time*6+.6)*.045;
-    model.tilt.rotation.x=mix(model.tilt.rotation.x,pose.pitch,1-Math.exp(-dt*7));
+    model.tilt.rotation.x=mix(model.tilt.rotation.x,pose.pitch+(state.braking?.16:0)+(state.hitStun>0?-.14:0),1-Math.exp(-dt*10));
     const walk=state.grounded?Math.sin(time*flatSpeed*.92)*clamp(flatSpeed/9,0,1):.28;
     const aerialPose=!state.grounded?clamp(flatSpeed/45,0,1):0;
     const action=state.combat,progress=scoutAttackProgress(action);
@@ -312,12 +326,12 @@ export function createPlayer(scene,world,camera){
     const flying=!state.grounded;
     for(let i=0;i<2;i++){
       const side=i===0?-1:1,legWalk=side*walk*.72;
-      const legAngle=legWalk+(flying?-.39-aerialPose*.12:0);
+      const legAngle=legWalk+(flying?-.39-aerialPose*.12:state.landingCompression*1.8);
       smoothBone(model.legs[i],legAngle,0,side*(flying?.12:0),dt,16);
-      smoothBone(model.knees[i],flying?.28+clamp(-legAngle,0,.23):Math.max(0,legWalk)*.19,0,0,dt,14);
-      const reach=state.hooks[i]?-.92:(flying?-.6:-side*walk*.36);
+      smoothBone(model.knees[i],flying?.28+clamp(-legAngle,0,.23):Math.max(0,legWalk)*.19+state.landingCompression,0,0,dt,14);
+      const reach=state.hooks[i]?-.92:(flying?state.braking?.2:-.6:-side*walk*.36);
       const slashArc=slash*(i===0?-.6:.78)+(spinning?(i===0?-.9:.9):0);
-      smoothBone(model.arms[i],reach+slashArc,side*slash*.22+(spinning?side*.20:0),side*(spinning?.55:.09),dt,action.phase==='strike'?45:18);
+      smoothBone(model.arms[i],reach+slashArc,side*slash*.22+(spinning?side*.20:0),side*(spinning?.55:state.hitStun>0?.39:.09),dt,action.phase==='strike'?45:18);
       smoothBone(model.elbows[i],state.hooks[i]?-.25:flying?-.32:-.14,0,side*slash*.18,dt,17);
       model.blades[i].visible=state.blades>0||state.attackTimer>0;
     }
@@ -355,7 +369,7 @@ export function createPlayer(scene,world,camera){
   }
   function setAspect(aspect){state.aspect=aspect;formMat.color.setHex(aspect.color);formCore.material.color.setHex(aspect.color);form.visible=true;}
   function clearAspect(){state.aspect=null;form.visible=false;}
-  function takeDamage(amount){const reduced=amount*(1-(state.aspect?.armor||0));state.health=Math.max(0,state.health-reduced);if(state.health===0){reset();return {downed:true,amount:reduced};}return {downed:false,amount:reduced};}
+  function takeDamage(amount){const reduced=amount*(1-(state.aspect?.armor||0));if(reduced>0){state.hitStun=.24;state.impactFeedback=Math.max(state.impactFeedback,Math.min(1,reduced/40));}state.health=Math.max(0,state.health-reduced);if(state.health===0){reset();return {downed:true,amount:reduced};}return {downed:false,amount:reduced};}
   function heal(amount){state.health=clamp(state.health+amount,0,100);}
   function refillGas(amount){state.gas=clamp(state.gas+amount,0,100);}
   function attack(){
@@ -370,10 +384,16 @@ export function createPlayer(scene,world,camera){
   }
   function consumeAttackHit(){return consumeScoutHit(state.combat);}
   function refillBlades(amount){state.blades=clamp(state.blades+amount,0,8);}
-  function grab(){if(state.grabbed)return false;resetScoutAttack(state.combat);state.grabbed=true;state.grabEscape=0;state.velocity.set(0,0,0);release(0);release(1);return true;}
-  function escapeGrab(){if(!state.grabbed)return {active:false,remaining:0};state.grabEscape++;
-    if(state.grabEscape>=7){state.grabbed=false;state.grabEscape=0;state.velocity.y=3;return {active:false,remaining:0};}
-    return {active:true,remaining:7-state.grabEscape};}
+  function grab(){if(state.grabbed)return false;resetScoutAttack(state.combat);state.grabbed=true;state.grabEscape=0;state.grabProgress=createEscapeProgress();state.velocity.set(0,0,0);release(0);release(1);return true;}
+  function escapeGrab(key='',time=null){
+    if(!state.grabbed)return {active:false,remaining:0};
+    const result=registerEscapePress(state.grabProgress,{key,time});
+    state.grabEscape=GRAB_ESCAPE.presses-result.remaining;
+    if(!result.active){
+      state.grabbed=false;state.grabEscape=0;state.grabProgress=createEscapeProgress();state.velocity.y=3;
+    }
+    return result;
+  }
   function updateCamera(dt,snap=false){
     ensureValid();
     const aim=state.position.clone().add(V(0,.9,0)),dir=viewDirection();
