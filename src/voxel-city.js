@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {resolveWorldCollision} from './collision.js';
+import {decorateReferenceLandmarks} from './voxel-landmarks.js';
 
 // A self-contained, low-draw-call voxel-inspired medieval city.
 // All building blocks sharing a material and 120m chunk become one InstancedMesh;
@@ -202,7 +203,29 @@ export function createVoxelWorld(scene){
       for(let i=-2;i<=2;i++)block('timber',x+i*w*.063,h*.65+1,z+d/2+2.05,.34,2.1,.36);
       block('wood',x,h*.65+2,z+d/2+2.1,w*.58,.35,.35);
     }
-    const top=roof(x,z,w,d,h,3.9+(variant%3)*.75,roofKind);
+    const roofRise=3.9+(variant%3)*.75;
+    const top=roof(x,z,w,d,h,roofRise,roofKind);
+    // Terracotta ridge tiles, overhanging eaves and individual roof dormers.
+    block('roofTile',x,h+roofRise+1.15,z,1.45,.35,d+2.6);
+    for(const edge of [-1,1]){
+      block('woodDark',x+edge*(w/2+.7),h+.1,z,1,.45,d+2.1);
+      for(let k=-1;k<=1;k++){
+        const zz=z+k*d*.28;
+        block('timber',x+edge*(w*.3),h+roofRise*.61,zz,2,2.3,2.3);
+        block('glass',x+edge*(w*.3),h+roofRise*.67,zz+1.2,1.2,1.15,.23);
+        block(roofKind,x+edge*(w*.3),h+roofRise*.61+1.3,zz,3,.6,3);
+      }
+    }
+    // Subtle trim and shutters separate each medieval frontage from the next.
+    for(let ix=-1;ix<=1;ix++){
+      const xx=x+ix*w*.27;
+      block('woodDark',xx-1.28,h*.46,z+d/2+.42,.3,2.5,.45);
+      block('woodDark',xx+1.28,h*.46,z+d/2+.42,.3,2.5,.45);
+    }
+    if(variant%5===0){
+      block('glow',x-w*.29,4.35,z+d/2+.7,1.1,1.5,1);
+      block('timber',x-w*.29,5.25,z+d/2+.7,1.6,.4,1.5);
+    }
     if(variant%3!==2){
       const cx=x+w*.25,cz=z+d*.2;
       block('stoneDark',cx,h+2.4,cz,2.9,4.3,2.8);
@@ -212,8 +235,8 @@ export function createVoxelWorld(scene){
     world.anchors.push(V(x,top+1,z));
   }
   let houseCount=0;
-  for(let gx=-150;gx<=150;gx+=22){
-    for(let gz=-150;gz<=150;gz+=22){
+  for(let gx=-150;gx<=150;gx+=20){
+    for(let gz=-150;gz<=150;gz+=20){
       const w=12.7+rng()*3.5,d=12.5+rng()*4;
       const x=gx+(rng()-.5)*2.8,z=gz+(rng()-.5)*2.8;
       if(Math.abs(x)>164||Math.abs(z)>164||intersectsReserved(x,z,w,d)||closeToRoad(x,z,w,d))continue;
@@ -334,6 +357,9 @@ export function createVoxelWorld(scene){
     block('timber',x+7,2.3,z+7,.9,4.5,.9);
     block('glow',x+7,4.8,z+7,2,1.7,2);
   }
+  // High-detail zones modeled after the supplied castle, island and mountain
+  // town references. Distant ridges remain decoration, never physics objects.
+  decorateReferenceLandmarks({block,world,rng});
   // Batch by both shared voxel material and spatial chunk for frustum culling.
   const unit=new THREE.BoxGeometry(1,1,1),dummy=new THREE.Object3D();
   let voxelCount=0,drawMeshes=0;
@@ -406,7 +432,7 @@ export function createVoxelWorld(scene){
       b.group.children[1].rotation.y+=dt*1.6;
     });
   };
-  world.stats={houses:houseCount,instances:voxelCount,drawMeshes};
+  world.stats={houses:houseCount,instances:voxelCount,drawMeshes, ...world.referenceStats};
   world.setBeaconActive(0);
   return world;
 }
