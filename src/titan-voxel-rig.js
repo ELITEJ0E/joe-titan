@@ -52,13 +52,15 @@ function pixelMark(kind){
 
 export function createVoxelTitanRig(scene,enemy,{color=0x9b675c,height=15}={}){
   const group=new THREE.Group();group.name='Voxel Titan '+enemy.id;
-  const skin=new THREE.MeshLambertMaterial({color,emissive:0x000000});
-  const shade=new THREE.MeshLambertMaterial({color:new THREE.Color(color).multiplyScalar(.69)});
-  const highlight=new THREE.MeshLambertMaterial({color:new THREE.Color(color).multiplyScalar(1.17)});
-  const eye=new THREE.MeshLambertMaterial({color:0x221b1b});
-  const mouth=new THREE.MeshLambertMaterial({color:0x542a2e});
-  const gear=new THREE.MeshLambertMaterial({color:0x48443c});
-  const armor=new THREE.MeshLambertMaterial({color:0x8a8275});
+  // Moving Titans receive dynamic sun illumination and physically plausible
+  // roughness; the static voxel buildings still use cheap baked lighting.
+  const skin=new THREE.MeshStandardMaterial({color,roughness:.82,metalness:0,emissive:0x000000});
+  const shade=new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(.69),roughness:.88,metalness:0});
+  const highlight=new THREE.MeshStandardMaterial({color:new THREE.Color(color).multiplyScalar(1.17),roughness:.75,metalness:0});
+  const eye=new THREE.MeshStandardMaterial({color:0x221b1b,roughness:.29,metalness:0});
+  const mouth=new THREE.MeshStandardMaterial({color:0x542a2e,roughness:.92,metalness:0});
+  const gear=new THREE.MeshStandardMaterial({color:0x48443c,roughness:.66,metalness:.04});
+  const armor=new THREE.MeshStandardMaterial({color:0x8a8275,roughness:.48,metalness:.05});
   const hips=pivot(group,'hips',[0,.54,0]);
   cube(hips,'pelvis',[.25,.13,.165],[0,-.025,0],shade);
   const torso=pivot(hips,'torso',[0,.06,0]);
