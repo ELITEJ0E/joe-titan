@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import {createVoxelWorld} from './voxel-city.js';
 import {loadMinecraftWorld} from './minecraft-world.js';
+import {createGraphicsQuality} from './graphics-quality.js';
+import {normaliseVisualQuality} from './shiganshina-visuals.js';
 import {createPlayer} from './player.js';
 import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
@@ -13,7 +15,9 @@ const canvas=$('game');
 const hud=$('hud'),menu=$('menu'),missionSelect=$('missionSelect'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
 const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},look:{x:0,y:0}};
-let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer;
+let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics;
+let visualQuality='performance';
+try{visualQuality=normaliseVisualQuality(localStorage.getItem('joe-titan-graphics'));}catch{}
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
 let hadPointerLock=false,practice=false,missionMode='course',debugVisible=false,lastRecovery=0;
 let hookRetryClock=0;
@@ -43,6 +47,19 @@ function playBeep(type='hook'){
     gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(type==='beacon'?.07:.03,now+.014);gain.gain.exponentialRampToValueAtTime(.0001,now+.22);osc.connect(gain).connect(ctx.destination);osc.start(now);osc.stop(now+.24);
   }catch{}
 }
+function updateGraphicsButtons(){
+  const label=visualQuality==='cinematic'?'CINEMATIC':'PERFORMANCE';
+  const hudButton=$('qualityButton'),menuButton=$('graphicsMenuButton');
+  if(hudButton)hudButton.textContent='VISUALS: '+label+' · K';
+  if(menuButton)menuButton.textContent='GRAPHICS: '+label+' (K TO SWITCH) ↗';
+}
+function toggleGraphicsQuality(){
+  visualQuality=visualQuality==='cinematic'?'performance':'cinematic';
+  graphics?.setQuality(visualQuality);
+  try{localStorage.setItem('joe-titan-graphics',visualQuality);}catch{}
+  updateGraphicsButtons();
+  if(started&&!paused&&!finished)showToast('GRAPHICS · '+visualQuality.toUpperCase());
+}
 async function init(){
   scene=new THREE.Scene();
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
@@ -67,6 +84,8 @@ async function init(){
     const status=$('startMessage');
     if(status)status.textContent='Shiganshina map not installed · Upload public/maps/shiganshina.jtvx to GitHub to activate it.';
   }
+  graphics=createGraphicsQuality(renderer,scene,camera,world,visualQuality);
+  updateGraphicsButtons();
   player=createPlayer(scene,world,camera);
   enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
@@ -75,7 +94,7 @@ async function init(){
   attachEvents();
   requestAnimationFrame(loop);
 }
-function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.65));}
+function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();if(graphics)graphics.resize();else renderer.setSize(innerWidth,innerHeight,false);}
 function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileInput.look={x:0,y:0};mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');player?.release(0);player?.release(1);}
 function requestControl(){
   if(matchMedia('(pointer: coarse)').matches)return;
@@ -128,7 +147,7 @@ function bladeStrike(){
   else showToast('BLADE MISSED · AIM FOR THE GLOWING NAPE');
 }
 function savePhoto(){
-  renderer.render(scene,camera);
+  if(graphics)graphics.render();else renderer.render(scene,camera);
   canvas.toBlob((blob)=>{
     if(!blob){showToast('PHOTO COULD NOT BE SAVED');return;}
     const url=URL.createObjectURL(blob),link=document.createElement('a');
@@ -199,6 +218,8 @@ function attachEvents(){
   $('freeFlightButton').onclick=()=>startFresh('free');$('resultsBoardButton').onclick=showMissionBoard;
   $('trialButton').onclick=()=>startFresh('course');
   $('photoButton').onclick=()=>savePhoto();
+  $('qualityButton').onclick=toggleGraphicsQuality;
+  $('graphicsMenuButton').onclick=toggleGraphicsQuality;
   $('createRoomButton').onclick=()=>{multiplayer.start();const code=multiplayer.createRoom();if(code){$('roomCodeInput').value=code;$('roomMessage').textContent=`ROOM CODE: ${code} · SHARE IT WITH A FRIEND`;}else $('roomMessage').textContent='CONNECTING TO PEER SERVER… YOUR ROOM CODE WILL APPEAR HERE';};
   $('joinRoomButton').onclick=()=>{const code=$('roomCodeInput').value.trim();if(!code){$('roomMessage').textContent='ENTER A ROOM CODE FIRST';return;}multiplayer.joinRoom(code);$('roomMessage').textContent='CONNECTING TO ROOM…';};
   $('helpButton').onclick=()=>{if(document.pointerLockElement===canvas)document.exitPointerLock();halt();};
@@ -231,6 +252,7 @@ function attachEvents(){
   document.addEventListener('keydown',(event)=>{
     if(started&&!paused&&!finished&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code))event.preventDefault();
     if(event.code==='Escape'){halt();if(document.pointerLockElement===canvas)document.exitPointerLock();return;}
+    if(event.code==='KeyK'&&!event.repeat){toggleGraphicsQuality();return;}
     if(event.code==='KeyH'&&started&&!finished){if(document.pointerLockElement===canvas)document.exitPointerLock();halt();return;}
     if(!started||paused||finished)return;
     if(document.pointerLockElement!==canvas&&document.activeElement!==canvas)return;
@@ -371,6 +393,6 @@ function loop(ms){
   }
   world.animate(gameTime,dt);
   if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
-  renderer.render(scene,camera);
+  if(graphics)graphics.render();else renderer.render(scene,camera);
 }
 init().catch(error=>{console.error(error);$('startMessage').textContent='Unable to initialize 3D renderer: '+error.message;$('startButton').disabled=true;});
