@@ -173,7 +173,12 @@ function setupTouchButton(button){
     if(action==='jump'){if(pressed&&player.grounded)input.jumpQueued=true;return;}
     if(action==='attack'){if(pressed)bladeStrike();return;}
     if(action==='aspect'){if(pressed)activateSelectedAspect();return;}
-    const key={leftCable:'KeyQ',rightCable:'KeyE',boost:'Space'}[action];if(key)mobileKey(key,pressed);
+    const key={leftCable:'KeyQ',rightCable:'KeyE',boost:'Space'}[action];
+    if(key){
+      mobileKey(key,pressed);
+      if(!pressed){if(key==='KeyQ')releaseUnheld(0);if(key==='KeyE')releaseUnheld(1);}
+      else if(key==='KeyQ'&&player.fire(0)||key==='KeyE'&&pressed&&player.fire(1))playBeep();
+    }
   };
   button.addEventListener('pointerdown',(event)=>{event.preventDefault();button.setPointerCapture(event.pointerId);set(true);});
   button.addEventListener('pointerup',()=>set(false));button.addEventListener('pointercancel',()=>set(false));button.addEventListener('lostpointercapture',()=>set(false));
