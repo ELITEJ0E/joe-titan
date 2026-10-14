@@ -13,7 +13,7 @@ test('baked sunlight dims an occluded upward-facing block, not a clear sky block
  const a=grid();
  assert.equal(blockAt(a,-2,4,3),0);
  assert.equal(sunVisibility(a,[4.5,1,4.5],3),1);
- set(a,2,2,3);
+ set(a,3,2,3);
  assert.ok(sunVisibility(a,[4.5,1,4.5],3)<.5);
  assert.equal(sunVisibility(a,[4.5,1,4.5],2),1);
 });
