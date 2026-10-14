@@ -8,6 +8,7 @@ import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
 import {createEnemyManager} from './enemies.js';
 import {createSupplyDrops} from './supplies.js';
+import {createRangedCombat} from './ranged-combat.js';
 import {createMultiplayer} from './multiplayer.js';
 import {MISSION_MODES,MISSION_RECORDS_KEY,readMissionRecords,recordMission} from './missions.js';
 
@@ -16,7 +17,7 @@ const canvas=$('game');
 const hud=$('hud'),menu=$('menu'),missionSelect=$('missionSelect'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
 const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},look:{x:0,y:0}};
-let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies;
+let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies,ranged;
 let visualQuality='performance';
 try{visualQuality=normaliseVisualQuality(localStorage.getItem('joe-titan-graphics'));}catch{}
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
@@ -89,7 +90,7 @@ async function init(){
   graphics=createGraphicsQuality(renderer,scene,camera,world,visualQuality);
   updateGraphicsButtons();
   player=createPlayer(scene,world,camera);
-  enemies=createEnemyManager(scene,world);supplies=createSupplyDrops(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
+  enemies=createEnemyManager(scene,world);supplies=createSupplyDrops(scene,world);ranged=createRangedCombat(scene,world,enemies);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
   camera.position.set(115,91,102);camera.lookAt(0,24,-10);
   window.addEventListener('resize',resize);
@@ -120,7 +121,7 @@ function halt(){if(!started||finished)return;paused=true;clearInputs();mobileCon
 function startFresh(mode='course'){
   missionMode=MISSION_MODES.some(mission=>mission.id===mode)?mode:'course';
   practice=missionMode!=='course';courseIndex=missionMode==='course'?0:TOTAL;elapsed=0;finished=false;
-  player.reset();enemies.reset();supplies?.reset();aspectState=createAspectState();world.setBeaconActive(missionMode==='course'?0:-1);
+  player.reset();enemies.reset();supplies?.reset();ranged?.reset();aspectState=createAspectState();world.setBeaconActive(missionMode==='course'?0:-1);
   $('checkpointNumber').textContent=missionMode==='course'?'01':missionMode==='hunt'?`${enemies.living()}`:'--';
   $('trialButton').textContent='START SKYLINE CIRCUIT ↗';
   clearInputs();startOrResume();hudUpdate();
@@ -268,6 +269,7 @@ function attachEvents(){
       if(event.code==='F3'){event.preventDefault();debugVisible=!debugVisible;$('diagnostics').classList.toggle('hidden',!debugVisible);}
       if(event.code==='KeyP')savePhoto();
       if(event.code==='KeyF')bladeStrike();
+      if(event.code==='KeyC'){const muzzle=player.position.clone().add(new THREE.Vector3(0,1.25,0));if(ranged?.fire(muzzle,player.viewDirection()))showToast('SCOUT PISTOL · '+ranged.ammo+' REMAINING');else showToast('RELOADING / NO AMMO');}
       if(event.code==='KeyX')activateSelectedAspect();
       if(/^Digit[1-9]$/.test(event.code)){const aspect=selectAspect(aspectState,Number(event.code.slice(-1))-1);showToast(`${aspect.name.toUpperCase()} SELECTED · X TO ENGAGE`);}
     }
@@ -379,6 +381,7 @@ function loop(ms){
       const aspectUpdate=updateAspect(aspectState,PHYSICS_STEP);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
       // AI + enemy pose updates at 48 Hz save CPU on dense voxel worlds.
       const danger=physicsTick%5===0?enemies.update(PHYSICS_STEP*5,player.position,gameTime):{damage:0};if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
+      if(physicsTick%2===0)ranged?.update(PHYSICS_STEP*2);
       if(physicsTick%8===0){
         const pickup=supplies?.update(PHYSICS_STEP*8,gameTime,player);
         if(pickup)showToast(pickup==='gas'?'GAS CANISTER · +60':pickup==='health'?'FIELD MEDICINE · +15':'BLADE SUPPLY COLLECTED');
