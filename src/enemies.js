@@ -21,7 +21,7 @@ export function createEnemySimulation(spawns=[]){
   });
   function reset(){for(const enemy of enemies){enemy.position.copy(enemy.spawnPosition);enemy.patrol.copy(enemy.spawnPatrol);enemy.health=enemy.maxHealth;enemy.napeHP=segmentNapeHealth(enemy.maxHealth);enemy.armRight=enemy.armLeft=0;enemy.alive=true;enemy.state='patrol';enemy.attack=0;enemy.stagger=0;enemy.forward.set(0,0,-1);}}
   function update(dt,playerPosition,decoyPosition=null,slow=1){
-    let damage=0;
+    let damage=0,grab=false;
     for(const enemy of enemies){
       if(!enemy.alive)continue;
       enemy.attack=Math.max(0,enemy.attack-dt);enemy.stagger=Math.max(0,enemy.stagger-dt);enemy.armRight=Math.max(0,enemy.armRight-dt);enemy.armLeft=Math.max(0,enemy.armLeft-dt);
@@ -33,11 +33,14 @@ export function createEnemySimulation(spawns=[]){
       const targetDistance=direction.length();
       if(targetDistance>.5){direction.multiplyScalar(1/targetDistance);enemy.forward.lerp(direction,Math.min(1,dt*4)).normalize();}
       if(enemy.state==='pursue'&&distance<7){
-        enemy.state='strike';if(enemy.attack===0){enemy.attack=2.4;damage=enemy.type==='colossus'||enemy.type==='beast'?35:enemy.type==='runner'?18:enemy.type==='armored'?28:24;}
+        enemy.state='strike';if(enemy.attack===0){
+          if(enemy.type==='armored'&&distance<4.8){enemy.attack=8;grab=true;}
+          else{enemy.attack=2.4;damage=enemy.type==='colossus'||enemy.type==='beast'?35:enemy.type==='runner'?18:enemy.type==='armored'?28:24;}
+        }
       }else if(targetDistance>.7){enemy.position.addScaledVector(enemy.forward,Math.min(targetDistance,enemy.speed*slow*dt));}
       enemy.position.x=clamp(enemy.position.x,-181,181);enemy.position.z=clamp(enemy.position.z,-181,181);
     }
-    return {damage};
+    return {damage,grab};
   }
   return {enemies,update,reset};
 }
