@@ -1,5 +1,17 @@
 # JOE TITAN — Skyline Trials
 
+## Current world: Voxel Asterfell (Minecraft-inspired)
+
+The default map is a **procedural, original voxel-style medieval fortress city** with stepped terracotta roofs, timber-framed houses, walls and open gate passages, cathedral, markets, towers and canals. The scene uses spatially grouped `THREE.InstancedMesh` blocks, small generated nearest-neighbour pixel textures, an analytic box raycast for ODM hooks and simple building collision proxies. It works without external map downloads or the old heavyweight GLB, and the player is created only after the world.
+
+- The game starts from `src/voxel-city.js` via `createVoxelWorld(scene)`.
+- The previous licensed Daniel Vicente model is preserved as `assets/legacy/medieval-city.glb` (outside Vite's `public/` folder). It is **not loaded or deployed** by the default game.
+- Credits for that archived model remain required if it is redistributed or reused: Daniel Vicente, [Medieval Modular City Realistic – WIP](https://sketchfab.com/3d-models/medieval-modular-city-realistic-wip-49e6306b29c74c679de8cec69473535b), CC BY 4.0.
+- `npm run verify` includes voxel world, grapple, avatar and movement regression checks.
+
+This visual style is inspired by voxel sandbox games; it does not use official Minecraft textures, blocks, game code or assets.
+
+
 An **original playable desktop-browser 3D aerial traversal prototype**, inspired by the genre of dual-grappling movement games. Original code, geometry, procedural textures, city design and character. No source code or assets copied from the reference game.
 
 ## Play now / run locally
