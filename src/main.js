@@ -49,6 +49,7 @@ function playBeep(type='hook'){
 }
 function updateGraphicsButtons(){
   const label=visualQuality==='cinematic'?'CINEMATIC':'PERFORMANCE';
+  document.body.classList.toggle('visual-cinematic',visualQuality==='cinematic');
   const hudButton=$('qualityButton'),menuButton=$('graphicsMenuButton');
   if(hudButton)hudButton.textContent='VISUALS: '+label+' · K';
   if(menuButton)menuButton.textContent='GRAPHICS: '+label+' (K TO SWITCH) ↗';
