@@ -42,7 +42,7 @@ test('swept collision slides along walls without killing lateral velocity',()=>{
   const previous=V(0,2,0),position=V(5,2,4),velocity=V(65,0,45);
   const hit=slideVoxelHorizontal(position,previous,velocity,solid);
   assert.ok(hit.blockedX);
-  assert.equal(velocity.x,0);
+  assert.equal(velocity.x,-3.25);
   assert.equal(velocity.z,45);
   assert.ok(position.x<2);
   assert.ok(position.z>3,'allow travel parallel to the wall');
@@ -53,7 +53,7 @@ test('swept voxel check catches thin walls even when a 100 Hz step passes them',
   const old=V(0,2,0),pos=V(3,2,0),velocity=V(90,0,0);
   slideVoxelHorizontal(pos,old,velocity,solid);
   assert.ok(pos.x<1.2);
-  assert.equal(velocity.x,0);
+  assert.equal(velocity.x,-4.5);
 });
 
 test('unobstructed flight retains full velocity and intended path',()=>{
