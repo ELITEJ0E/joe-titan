@@ -50,7 +50,8 @@
       <h2>SKYLINE TRIALS</h2>
       <p class="intro">Master the momentum. Own the sky. Launch dual cable anchors between the towers of Asterfell and clear six aerial beacons in one fluid run.</p>
       <div class="feature-row"><div><b>02</b><small>INDEPENDENT HOOKS</small></div><div><b>06</b><small>SKYLINE BEACONS</small></div><div><b>01</b><small>OPEN WORLD DISTRICT</small></div></div>
-      <button id="startButton" class="start" type="button">DEPLOY INTO ASTERFELL <span>↗</span></button>
+      <button id="startButton" class="start" type="button">DEPLOY SKYLINE CIRCUIT <span>↗</span></button>
+      <button id="missionSelectButton" class="secondary" type="button">OPEN OPERATIONS BOARD <span>↗</span></button>
       <button id="practiceButton" class="secondary" type="button">FREE FLIGHT PRACTICE <span>↗</span></button>
       <section class="multiplayer-lobby" aria-label="Multiplayer lobby"><div class="lobby-heading"><span>FREE CO-OP LINK</span><small>PEER-TO-PEER · NO ACCOUNT</small></div><div class="lobby-actions"><button id="createRoomButton" class="lobby-button" type="button">CREATE ROOM</button><input id="roomCodeInput" type="text" inputmode="text" maxlength="64" autocomplete="off" placeholder="PASTE ROOM CODE" aria-label="Room code"/><button id="joinRoomButton" class="lobby-button" type="button">JOIN</button></div><p id="roomMessage" class="room-message">Create a room, then share its code with a friend.</p></section>
       <div id="startMessage" class="hint">Mouse + keyboard · Drag or arrow keys to aim if mouse capture is unavailable</div>
@@ -58,8 +59,23 @@
     </div>
     <div class="menu-side"><div class="vertical-text">CITY OF ASTERFELL // AERIAL REGIMENT</div><div class="coordinates">48° 30′ N<br/>6° 40′ E<br/><span>DAWN · CLEAR SKIES</span></div></div>
   </div>
+  <div id="missionSelect" class="overlay mission-select hidden" aria-labelledby="operationsTitle">
+    <div class="mission-shell">
+      <div class="overline"><span class="red-square"></span> ASTERFELL AERIAL REGIMENT / DEPLOYMENT BOARD</div>
+      <p class="eyebrow">CHOOSE YOUR OPERATION</p>
+      <h2 id="operationsTitle">FLIGHT ORDERS</h2>
+      <p class="intro">Every operation uses your Vector Gear, Vanguard Aspects, and the threats already roaming Asterfell.</p>
+      <div class="mission-cards">
+        <button class="mission-card" data-mission="course" type="button"><span class="mission-card-top"><small>01 / TIME TRIAL</small><b id="courseRecord">NEW RECORD</b></span><strong>Skyline Circuit</strong><span>Capture all six signal beacons. Beat your best time.</span><i>DEPLOY ↗</i></button>
+        <button class="mission-card" data-mission="hunt" type="button"><span class="mission-card-top"><small>02 / ELIMINATION</small><b id="huntRecord">NEW RECORD</b></span><strong>Riftborn Hunt</strong><span>Disperse all six giants in a fast aerial strike.</span><i>DEPLOY ↗</i></button>
+        <button class="mission-card" data-mission="survival" type="button"><span class="mission-card-top"><small>03 / SURVIVAL</small><b id="survivalRecord">UNSECURED</b></span><strong>Last Light</strong><span>Hold the ward and survive for 90 seconds.</span><i>DEPLOY ↗</i></button>
+        <button class="mission-card mission-card-open" data-mission="free" type="button"><span class="mission-card-top"><small>04 / OPEN WORLD</small><b>NO CLOCK</b></span><strong>Free Flight</strong><span>Explore Asterfell, practise your routes, and meet the Riftborn.</span><i>TAKE OFF ↗</i></button>
+      </div>
+      <button id="missionsBackButton" class="secondary mission-back" type="button">← RETURN TO TITLE</button>
+    </div>
+  </div>
   <div id="pause" class="overlay pause hidden"><div class="menu-shell"><div class="overline">FLIGHT OPERATIONS / PAUSED</div><h2 class="pause-title" id="pauseTitle">FLIGHT PAUSED</h2><p class="intro" id="pauseMessage">Unhook, reset your aim, and resume the run.</p><button id="resumeButton" class="start" type="button">RESUME FLIGHT <span>↗</span></button><button id="restartButton" class="secondary" type="button">RESTART FLIGHT</button><button id="photoButton" class="secondary" type="button">SAVE FLIGHT PHOTO</button><div class="menu-controls compact"><div><span>LMB / Q</span> Left cable</div><div><span>RMB / E</span> Right cable</div><div><span>SHIFT</span> Reel in</div><div><span>SPACE</span> Boost</div><div><span>G</span> Brake</div><div><span>V</span> Toggle camera</div><div><span>R</span> Reset position</div><div><span>H / ESC</span> Pause</div><div><span>ARROWS</span> Aim camera</div><div><span>M</span> Toggle map</div><div><span>P</span> Save photo</div><div><span>F3</span> Flight diagnostics</div></div></div></div>
-  <div id="complete" class="overlay pause hidden"><div class="menu-shell"><div class="overline">ASTERFELL AERIAL REGIMENT / COURSE CLEARED</div><p class="eyebrow">CERTIFICATION COMPLETE</p><h2 class="pause-title">THE SKY IS YOURS.</h2><p class="intro">All six signal beacons cleared. Your flight time:</p><div id="finalTime" class="final-time">00:00.00</div><p class="hint" id="recordMessage"></p><button id="againButton" class="start" type="button">FLY AGAIN <span>↗</span></button><button id="freeFlightButton" class="secondary" type="button">CONTINUE FREE FLIGHT</button></div></div>
+  <div id="complete" class="overlay pause hidden"><div class="menu-shell"><div class="overline" id="completeEyebrow">ASTERFELL AERIAL REGIMENT / OPERATION CLEARED</div><p class="eyebrow" id="completeTitle">CERTIFICATION COMPLETE</p><h2 class="pause-title" id="completeHeading">THE SKY IS YOURS.</h2><p class="intro" id="completeMessage">Your flight time:</p><div id="finalTime" class="final-time">00:00.00</div><p class="hint" id="recordMessage"></p><button id="againButton" class="start" type="button">REDEPLOY <span>↗</span></button><button id="freeFlightButton" class="secondary" type="button">CONTINUE FREE FLIGHT</button><button id="resultsBoardButton" class="secondary" type="button">RETURN TO OPERATIONS <span>↗</span></button></div></div>
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"}}</script>
   <script type="module" src="./src/main.js"></script>
 </body>

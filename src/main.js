@@ -5,19 +5,32 @@ import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
 import {createEnemyManager} from './enemies.js';
 import {createMultiplayer} from './multiplayer.js';
+import {MISSION_MODES,MISSION_RECORDS_KEY,readMissionRecords,recordMission} from './missions.js';
 
 const $=(id)=>document.getElementById(id);
 const canvas=$('game');
-const hud=$('hud'),menu=$('menu'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
+const hud=$('hud'),menu=$('menu'),missionSelect=$('missionSelect'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
 const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},look:{x:0,y:0}};
 let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer;
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
-let hadPointerLock=false,practice=false,debugVisible=false,lastRecovery=0;
+let hadPointerLock=false,practice=false,missionMode='course',debugVisible=false,lastRecovery=0;
 const TOTAL=6;
-try{best=Number(localStorage.getItem('joe-titan-best')||localStorage.getItem('aetherline-best'))||null;}catch{}
+let missionRecords;
+try{missionRecords=readMissionRecords(localStorage);}catch{missionRecords=readMissionRecords(null);}
+best=missionRecords.bestTimes.course||null;
 const formatTime=(t)=>`${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}.${String(Math.floor((t%1)*100)).padStart(2,'0')}`;
 $('bestTime').textContent=best?formatTime(best):'--:--.--';
+function persistMissionRecords(){try{localStorage.setItem(MISSION_RECORDS_KEY,JSON.stringify(missionRecords));if(missionRecords.bestTimes.course)localStorage.setItem('joe-titan-best',String(missionRecords.bestTimes.course));}catch{}}
+function updateMissionBoard(){
+  for(const mission of MISSION_MODES){
+    const card=document.querySelector(`[data-mission="${mission.id}"]`),record=missionRecords.bestTimes[mission.id];
+    const label=$(mission.id==='course'?'courseRecord':mission.id==='hunt'?'huntRecord':'survivalRecord');
+    if(card)card.setAttribute('aria-label',`${mission.name}. ${mission.description}${record?`. Best time ${formatTime(record)}`:missionRecords.completed.includes(mission.id)?'. Cleared':'. New operation'}`);
+    if(label)label.textContent=record?`BEST ${formatTime(record)}`:missionRecords.completed.includes(mission.id)?'OPERATION CLEARED':mission.id==='survival'?'UNSECURED':'NEW RECORD';
+  }
+}
+updateMissionBoard();
 function showToast(message){toast.textContent=message;toast.classList.add('show');toastUntil=performance.now()/1000+2.4;}
 function playBeep(type='hook'){
   // Tiny synth feedback, no borrowed music or sound libraries.
@@ -56,14 +69,21 @@ async function enterImmersive(){
 }
 function startOrResume(){
   started=true;paused=false;finished=false;
-  menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
+  menu.classList.add('hidden');missionSelect.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
   mobileControls?.classList.remove('hidden');
   canvas.focus();accumulator=0;
   if(matchMedia('(pointer: coarse)').matches)enterImmersive();
   requestControl();
 }
 function halt(){if(!started||finished)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Unhook, reset your aim, and resume the run.';}
-function startFresh(freeFlight=false){practice=freeFlight;courseIndex=freeFlight?TOTAL:0;elapsed=0;finished=false;player.reset();aspectState=createAspectState();world.setBeaconActive(freeFlight?-1:0);$('checkpointNumber').textContent=freeFlight?'--':'01';clearInputs();startOrResume();hudUpdate();}
+function startFresh(mode='course'){
+  missionMode=MISSION_MODES.some(mission=>mission.id===mode)?mode:'course';
+  practice=missionMode!=='course';courseIndex=missionMode==='course'?0:TOTAL;elapsed=0;finished=false;
+  player.reset();enemies.reset();aspectState=createAspectState();world.setBeaconActive(missionMode==='course'?0:-1);
+  $('checkpointNumber').textContent=missionMode==='course'?'01':missionMode==='hunt'?`${enemies.living()}`:'--';
+  $('trialButton').textContent='START SKYLINE CIRCUIT ↗';
+  clearInputs();startOrResume();hudUpdate();
+}
 function clearActiveAspect(){aspectState.active=null;aspectState.duration=0;player.clearAspect();}
 function activateSelectedAspect(){
   const result=activateAspect(aspectState);
@@ -139,10 +159,14 @@ function setupTouchControls(){
   setupTouchStick('moveStick','move');setupTouchStick('lookStick','look');
   mobileControls?.querySelectorAll('[data-touch-action]').forEach(setupTouchButton);
 }
+function showMissionBoard(){updateMissionBoard();menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.remove('hidden');}
 function attachEvents(){
-  $('startButton').onclick=()=>startFresh();$('practiceButton').onclick=()=>startFresh(true);$('resumeButton').onclick=()=>startOrResume();$('restartButton').onclick=()=>startFresh(practice);$('againButton').onclick=()=>startFresh();
-  $('freeFlightButton').onclick=()=>{practice=true;courseIndex=TOTAL;world.setBeaconActive(-1);startOrResume();hudUpdate();};
-  $('trialButton').onclick=()=>startFresh();
+  $('startButton').onclick=()=>startFresh('course');$('practiceButton').onclick=()=>startFresh('free');$('missionSelectButton').onclick=showMissionBoard;
+  $('missionsBackButton').onclick=()=>{missionSelect.classList.add('hidden');menu.classList.remove('hidden');};
+  missionSelect.querySelectorAll('[data-mission]').forEach((button)=>{button.onclick=()=>startFresh(button.dataset.mission);});
+  $('resumeButton').onclick=()=>startOrResume();$('restartButton').onclick=()=>startFresh(missionMode);$('againButton').onclick=()=>startFresh(missionMode);
+  $('freeFlightButton').onclick=()=>startFresh('free');$('resultsBoardButton').onclick=showMissionBoard;
+  $('trialButton').onclick=()=>startFresh('course');
   $('photoButton').onclick=()=>savePhoto();
   $('createRoomButton').onclick=()=>{multiplayer.start();const code=multiplayer.createRoom();if(code){$('roomCodeInput').value=code;$('roomMessage').textContent=`ROOM CODE: ${code} · SHARE IT WITH A FRIEND`;}else $('roomMessage').textContent='CONNECTING TO PEER SERVER… YOUR ROOM CODE WILL APPEAR HERE';};
   $('joinRoomButton').onclick=()=>{const code=$('roomCodeInput').value.trim();if(!code){$('roomMessage').textContent='ENTER A ROOM CODE FIRST';return;}multiplayer.joinRoom(code);$('roomMessage').textContent='CONNECTING TO ROOM…';};
@@ -200,44 +224,65 @@ function attachEvents(){
     if(event.code==='KeyE')player?.release(1);
   });
 }
-function completeCourse(){
-  finished=true;clearInputs();mobileControls?.classList.add('hidden');hud.classList.add('hidden');complete.classList.remove('hidden');$('finalTime').textContent=formatTime(elapsed);
-  let record=!best||elapsed<best;
-  if(record){best=elapsed;try{localStorage.setItem('joe-titan-best',String(best));}catch{}$('bestTime').textContent=formatTime(best);}
-  $('recordMessage').textContent=record?'NEW PERSONAL BEST — CERTIFICATION RECORDED':'PERSONAL BEST — '+formatTime(best);
-  if(document.pointerLockElement===canvas)document.exitPointerLock();playBeep('beacon');
+function completeMission(success=true){
+  if(finished)return;
+  finished=true;clearInputs();mobileControls?.classList.add('hidden');hud.classList.add('hidden');missionSelect.classList.add('hidden');complete.classList.remove('hidden');
+  const records=success?recordMission(missionRecords,missionMode,missionMode==='course'||missionMode==='hunt'?elapsed:undefined):{newBest:false};
+  if(success&&missionMode!=='free'){missionRecords=records.records;persistMissionRecords();updateMissionBoard();}
+  best=missionRecords.bestTimes[missionMode]||null;
+  $('bestTime').textContent=missionRecords.bestTimes.course?formatTime(missionRecords.bestTimes.course):'--:--.--';
+  $('completeEyebrow').textContent=success?'ASTERFELL AERIAL REGIMENT / OPERATION CLEARED':'ASTERFELL AERIAL REGIMENT / PILOT RECOVERED';
+  $('completeTitle').textContent=success?(missionMode==='course'?'CERTIFICATION COMPLETE':'OPERATION COMPLETE'):'FLIGHT LOST';
+  $('completeHeading').textContent=!success?'THE WARD HOLDS FOR ANOTHER DAY.':missionMode==='course'?'THE SKY IS YOURS.':missionMode==='hunt'?'THE RIFT IS QUIET.':missionMode==='survival'?'ASTERFELL STANDS.':'FREE FLIGHT COMPLETE.';
+  $('completeMessage').textContent=!success?`You held the ward for ${formatTime(elapsed)}. Redeploy to try again.`:missionMode==='course'?'All six signal beacons captured. Your flight time:':missionMode==='hunt'?'Every Riftborn dispersed. Your clear time:':missionMode==='survival'?'The 90-second assault is over. Your survival time:':'Asterfell is open for your next flight.';
+  $('finalTime').textContent=formatTime(elapsed);
+  $('recordMessage').textContent=!success?'The operation was not recorded.':missionMode==='free'?'Free Flight is always available from the operations board.':records.newBest?'NEW PERSONAL BEST — FLIGHT RECORDED':missionMode==='survival'?'OPERATION CLEARED — RECORD SECURED':`PERSONAL BEST — ${formatTime(best||elapsed)}`;
+  $('againButton').textContent=missionMode==='free'?'FLY AGAIN':'REDEPLOY';
+  if(document.pointerLockElement===canvas)document.exitPointerLock();if(success)playBeep('beacon');
 }
 function updateChallenge(dt){
-  if(courseIndex>=TOTAL)return;
-  elapsed+=dt;
+  if(missionMode!=='course'||courseIndex>=TOTAL)return;
   const beacon=world.beacons[courseIndex],dist=player.position.distanceTo(beacon.group.position);
   if(dist<7.4){
     courseIndex++;playBeep('beacon');
-    if(courseIndex===TOTAL){completeCourse();return;}
+    if(courseIndex===TOTAL){completeMission(true);return;}
     world.setBeaconActive(courseIndex);showToast(`SIGNAL CAPTURED — ${String(courseIndex).padStart(2,'0')} / 06`);
     $('checkpointNumber').textContent=String(courseIndex+1).padStart(2,'0');
   }
+}
+function updateMission(dt){
+  if(finished||missionMode==='free')return;
+  elapsed+=dt;
+  if(missionMode==='hunt'&&enemies.living()===0){completeMission(true);return;}
+  if(missionMode==='survival'&&elapsed>=90)completeMission(true);
 }
 function hudUpdate(){
   $('speed').textContent=String(Math.round(player.speed*3.6)).padStart(3,'0');
   $('altitude').textContent=String(Math.max(0,Math.round(player.position.y-1))).padStart(3,'0');
   $('gasPercent').textContent=Math.round(player.gas)+'%';$('gasFill').style.width=Math.round(player.gas)+'%';
   $('gasFill').style.background=player.gas<19?'linear-gradient(90deg,#d67567,#f2a28d)':'linear-gradient(90deg,#e8b27a,#f9dcb0)';
-  $('timer').textContent=formatTime(elapsed);
+  $('timer').textContent=formatTime(missionMode==='survival'?Math.max(0,90-elapsed):elapsed);
   $('vertical').textContent=player.velocity.y>1?'↑ CLIMB':player.velocity.y< -1?'↓ DESCEND':'— LEVEL';
   const l=!!player.hooks[0],r=!!player.hooks[1];
   $('leftHook').classList.toggle('active',l);$('rightHook').classList.toggle('active',r);
   $('leftState').textContent=l?'LOCKED':'STANDBY';$('rightState').textContent=r?'LOCKED':'STANDBY';
   $('bearingLabel').textContent=['N','NE','E','SE','S','SW','W','NW'][(Math.round(((-player.yaw%(Math.PI*2)+Math.PI*2)%(Math.PI*2))/(Math.PI/4)))%8];
-  if(courseIndex<TOTAL){
+  if(missionMode==='course'&&courseIndex<TOTAL){
     const d=player.position.distanceTo(world.beacons[courseIndex].point);
     $('beaconDistance').textContent=Math.round(d);
-    $('missionText').textContent=`Reach signal beacon ${String(courseIndex+1).padStart(2,'0')} / 06`;
-  }else{$('beaconDistance').textContent='--';$('missionText').textContent='Free flight — explore Asterfell';}
+    $('missionText').textContent=`Skyline Circuit · Signal beacon ${String(courseIndex+1).padStart(2,'0')} / 06`;
+  }else if(missionMode==='hunt'){
+    $('beaconDistance').textContent=`${enemies.living()} LEFT`;$('checkpointNumber').textContent=String(enemies.living()).padStart(2,'0');
+    $('missionText').textContent='Riftborn Hunt · Disperse every giant';
+  }else if(missionMode==='survival'){
+    $('beaconDistance').textContent=`${Math.max(0,90-elapsed).toFixed(0)} SEC`;$('checkpointNumber').textContent='HOLD';
+    $('missionText').textContent='Last Light · Survive the Riftborn assault';
+  }else{$('beaconDistance').textContent='--';$('missionText').textContent='Free Flight · Explore Asterfell';}
   $('reticleText').textContent=l&&r?'DUAL ANCHOR LOCK':l?'LEFT CABLE ATTACHED':r?'RIGHT CABLE ATTACHED':'HOLD LMB / RMB TO GRAPPLE';
   if(!l&&!r){const target=player.target(0);$('reticle').classList.toggle('available',!!target);$('reticleText').textContent=target?`ANCHOR READY · ${Math.round(target.distanceTo(player.position))} M`:'NO ANCHOR IN RANGE';}
   else $('reticle').classList.remove('available');
-  $('trialButton').classList.toggle('hidden',!practice);
+  $('trialButton').classList.toggle('hidden',missionMode!=='free');
+  $('timer').parentElement.previousElementSibling.textContent=missionMode==='survival'?'TIME TO HOLD':'ELAPSED';
   const selected=ASPECTS[aspectState.selected],active=aspectState.active;
   $('aspectName').textContent=active?active.name.toUpperCase():selected.name.toUpperCase();
   $('aspectDescription').textContent=active?`${Math.ceil(aspectState.duration)} S ACTIVE`:selected.description.toUpperCase();
@@ -264,7 +309,8 @@ function loop(ms){
       player.update(1/100,input,gameTime);
       multiplayer?.update(player,gameTime);
       const aspectUpdate=updateAspect(aspectState,1/100);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
-      const danger=enemies.update(1/100,player.position,gameTime);if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed)clearActiveAspect();showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
+      const danger=enemies.update(1/100,player.position,gameTime);if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
+      if(!finished)updateMission(1/100);
       updateChallenge(1/100);
       accumulator-=1/100;steps++;
       if(paused||finished){accumulator=0;break;}

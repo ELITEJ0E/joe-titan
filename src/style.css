@@ -9,6 +9,24 @@
 @media(max-height:780px){.dividerline{margin-bottom:24px}.feature-row{margin:18px 0}.menu-controls{margin-top:18px}.menu-shell h1{font-size:clamp(72px,10vw,130px)}.menu-shell h2{margin-bottom:15px}.intro{line-height:1.6}}
 .menu-shell{scrollbar-width:none}.menu-shell::-webkit-scrollbar{display:none;width:0;height:0}
 .mobile-controls{display:none;position:fixed;inset:0;z-index:7;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}
+.mission-select{align-items:flex-start;justify-content:center;overflow-y:auto;background:radial-gradient(ellipse at 78% 30%,#263b4bdb,#0d1822f5 73%)}
+.mission-shell{width:min(1120px,90vw);padding:clamp(24px,5vh,58px) 0 36px}
+.mission-shell>.eyebrow{margin-top:27px}
+.mission-shell h2{font:900 clamp(44px,7vw,76px)/.95 'Barlow Condensed',sans-serif;letter-spacing:.045em;margin:8px 0 12px}
+.mission-shell>.intro{max-width:640px;margin:0 0 23px}
+.mission-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.mission-card{min-height:172px;padding:17px 18px;background:linear-gradient(145deg,#132b3bde,#0d1b27e8);border:1px solid #9cc2d13e;color:#edf2ed;display:flex;flex-direction:column;align-items:flex-start;text-align:left;transition:transform .16s,border-color .16s,background .16s}
+.mission-card:hover,.mission-card:focus-visible{transform:translateY(-2px);border-color:#e8bd8a;background:linear-gradient(145deg,#23435ade,#102432f5);outline:none}
+.mission-card-top{width:100%;display:flex;justify-content:space-between;gap:10px;margin-bottom:17px;color:#e5bd91}
+.mission-card-top small,.mission-card-top b{font:800 9px 'Manrope',sans-serif;letter-spacing:.14em}
+.mission-card-top b{color:#a6dec3;text-align:right}
+.mission-card>strong{font:800 28px/.95 'Barlow Condensed',sans-serif;letter-spacing:.035em}
+.mission-card>span:not(.mission-card-top){max-width:410px;margin-top:8px;color:#c3d1d2;font-size:11px;line-height:1.55}
+.mission-card>i{margin-top:auto;padding-top:13px;color:#e9bd8a;font-size:9px;font-style:normal;font-weight:800;letter-spacing:.14em}
+.mission-card-open{background:linear-gradient(145deg,#243428dc,#11251fdc);border-color:#9cce9760}
+.mission-back{max-width:300px;margin-top:17px}
+.mission-select.hidden{display:none}
+@media(max-width:650px){.mission-shell{width:calc(100vw - 36px);padding-top:27px}.mission-cards{grid-template-columns:1fr;gap:9px}.mission-card{min-height:136px;padding:13px 15px}.mission-card-top{margin-bottom:12px}.mission-shell>.eyebrow{margin-top:18px}.mission-card>strong{font-size:25px}.mission-back{margin-top:12px}}
 .touch-stick{position:absolute;left:22px;bottom:24px;width:118px;height:118px;border:1px solid #d8e8eb55;border-radius:50%;background:#091b28a6;box-shadow:inset 0 0 0 12px #112d3c66,0 8px 28px #0005;pointer-events:auto;touch-action:none}
 .touch-stick span{position:absolute;left:50%;top:50%;width:46px;height:46px;border-radius:50%;transform:translate(-50%,-50%);background:linear-gradient(145deg,#e9bd8c,#b97a56);box-shadow:0 4px 14px #0007;border:2px solid #fff5;transition:transform .08s ease-out}
 .touch-stick small{position:absolute;left:0;right:0;bottom:-18px;text-align:center;font-size:8px;font-weight:800;letter-spacing:.18em;color:#edf5f2aa}

@@ -12,8 +12,9 @@ export function createEnemySimulation(spawns=[]){
   const enemies=spawns.map((spawn,index)=>{
     const type=TYPES[spawn.type]||TYPES.wanderer,position=V(...spawn.position);
     return {id:spawn.id||`riftborn-${index}`,type:spawn.type||'wanderer',height:type.height,maxHealth:type.health,health:type.health,
-      speed:type.speed,position,patrol:V(...(spawn.patrol||spawn.position)),forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0};
+      speed:type.speed,position,spawnPosition:position.clone(),patrol:V(...(spawn.patrol||spawn.position)),spawnPatrol:V(...(spawn.patrol||spawn.position)),forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0};
   });
+  function reset(){for(const enemy of enemies){enemy.position.copy(enemy.spawnPosition);enemy.patrol.copy(enemy.spawnPatrol);enemy.health=enemy.maxHealth;enemy.alive=true;enemy.state='patrol';enemy.attack=0;enemy.stagger=0;enemy.forward.set(0,0,-1);}}
   function update(dt,playerPosition,decoyPosition=null,slow=1){
     let damage=0;
     for(const enemy of enemies){
@@ -33,7 +34,7 @@ export function createEnemySimulation(spawns=[]){
     }
     return {damage};
   }
-  return {enemies,update};
+  return {enemies,update,reset};
 }
 
 export function strikeWeakPoint(enemy,origin,direction,damage=18){
@@ -67,6 +68,7 @@ export function createEnemyManager(scene,world){
   ]);
   simulation.enemies.forEach(enemy=>humanoid(scene,enemy));
   let slowTimer=0,decoyTimer=0,decoy=null;
+  function reset(){simulation.reset();slowTimer=0;decoyTimer=0;decoy=null;for(const enemy of simulation.enemies){if(enemy.group){enemy.group.visible=true;enemy.group.position.copy(enemy.position);}}}
   function update(dt,playerPosition,time){
     slowTimer=Math.max(0,slowTimer-dt);decoyTimer=Math.max(0,decoyTimer-dt);
     const result=simulation.update(dt,playerPosition,decoyTimer>0?decoy:null,slowTimer>0?.48:1);
@@ -83,5 +85,5 @@ export function createEnemyManager(scene,world){
     return {hit:false};
   }
   function pulse(position,range,damage){let hits=0;for(const enemy of simulation.enemies){if(enemy.alive&&enemy.position.distanceTo(position)<=range){enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.9;if(enemy.health===0)enemy.alive=false;hits++;}}return hits;}
-  return {enemies:simulation.enemies,update,strike,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
+  return {enemies:simulation.enemies,update,reset,strike,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
 }
