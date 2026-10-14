@@ -23,9 +23,10 @@ test('slash has readable windup, one strike event and recovery',()=>{
 test('spin is distinct and queued actions wait for recovery',()=>{
  const action=createScoutAttackState();
  beginScoutAttack(action,'spin');
+ advanceScoutAttack(action,.3); // wait until the last 0.3 s of spin
  assert.equal(beginScoutAttack(action,'slash'),false);
  assert.equal(action.buffer,'slash');
- advanceScoutAttack(action,.6);
+ advanceScoutAttack(action,.3);
  assert.equal(action.kind,'slash');
  assert.equal(action.phase,'windup');
  assert.equal(cubicEaseOut(0),0);
