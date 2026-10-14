@@ -54,7 +54,7 @@ test('new shifter Titan variants have multiple nape segments',()=>{
  assert.equal(sim.enemies[0].shifter,true);
  assert.ok(sim.enemies[0].napeHP>=3);
  const e=sim.enemies[1];e.forward.set(0,0,-1);
- const p=V(10,e.height*.82,-7),d=V(0,0,1);
+ const p=V(10,e.height*.82,7),d=V(0,0,-1);
  const shallow=strikeWeakPoint(e,p,d,25,10);
  assert.equal(shallow.kind,'shallow');
  const deep=strikeWeakPoint(e,p,d,45,10);
