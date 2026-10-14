@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {findSafeMinecraftSpawn} from './minecraft-spawn.js';
 import {slideVoxelHorizontal} from './voxel-slide.js';
 import {createShiganshinaVisuals} from './shiganshina-visuals.js';
+import {sunVisibility,cornerOcclusion} from './voxel-illumination.js';
 // A Minecraft Java Anvil world baked into a compact, greedy-meshed JTVX archive.
 // The archive is user-supplied and optional: no copyrighted map ships in source.
 const ORIGIN=new THREE.Vector3(-152,-10,-146);
@@ -28,7 +29,7 @@ function createSectors(scene,asset,material){
     bins.get(key).push(offset);
   }
   for(const offsets of bins.values()){
-    const n=offsets.length,positions=new Float32Array(n*12),normals=new Float32Array(n*12),uvs=new Float32Array(n*8),tiles=new Float32Array(n*4);
+    const n=offsets.length,positions=new Float32Array(n*12),normals=new Float32Array(n*12),uvs=new Float32Array(n*8),tiles=new Float32Array(n*4),shadows=new Float32Array(n*4),occlusion=new Float32Array(n*4);
     const indices=n*4>65535?new Uint32Array(n*6):new Uint16Array(n*6);
     for(let i=0;i<n;i++){
       const o=offsets[i],x=d.getUint16(o,true),y=d.getUint8(o+2),z=d.getUint16(o+3,true);
@@ -37,7 +38,11 @@ function createSectors(scene,asset,material){
       const q=axis===0?[[x+(positive?1:0),y,z],[x+(positive?1:0),y,z+width],[x+(positive?1:0),y+height,z+width],[x+(positive?1:0),y+height,z]]
         :axis===1?[[x,y+(positive?1:0),z],[x+width,y+(positive?1:0),z],[x+width,y+(positive?1:0),z+height],[x,y+(positive?1:0),z+height]]
         :[[x,y,z+(positive?1:0)],[x+width,y,z+(positive?1:0)],[x+width,y+height,z+(positive?1:0)],[x,y+height,z+(positive?1:0)]];
+      const faceCenter=[(q[0][0]+q[2][0])*.5,(q[0][1]+q[2][1])*.5,(q[0][2]+q[2][2])*.5];
+      const sunlight=sunVisibility(asset,faceCenter,side);
       for(let j=0;j<4;j++){
+        shadows[i*4+j]=sunlight;
+        occlusion[i*4+j]=cornerOcclusion(asset,q[j],side,j);
         const p=i*12+j*3,t=i*8+j*2;
         positions[p]=q[j][0]+ORIGIN.x;positions[p+1]=q[j][1]+ORIGIN.y;positions[p+2]=q[j][2]+ORIGIN.z;
         normals.set(NORMALS[side],p);uvs[t]=(j===1||j===2)?width:0;uvs[t+1]=j>=2?height:0;tiles[i*4+j]=type;
@@ -50,6 +55,8 @@ function createSectors(scene,asset,material){
     geometry.setAttribute('normal',new THREE.BufferAttribute(normals,3));
     geometry.setAttribute('uv',new THREE.BufferAttribute(uvs,2));
     geometry.setAttribute('aTile',new THREE.BufferAttribute(tiles,1));
+    geometry.setAttribute('aShadow',new THREE.BufferAttribute(shadows,1));
+    geometry.setAttribute('aAO',new THREE.BufferAttribute(occlusion,1));
     geometry.setIndex(new THREE.BufferAttribute(indices,1));geometry.computeBoundingSphere();
     const mesh=new THREE.Mesh(geometry,material);mesh.name='Shiganshina sector';mesh.frustumCulled=true;
     scene.add(mesh);
@@ -171,6 +178,6 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   const animateMissions=world.animate;
   world.animate=(time,dt)=>{visuals.animate(time);animateMissions(time,dt);};
   world.setVisualQuality=visuals.setQuality;
-  world.stats={quads:asset.count,sectors,blocks:asset.voxel.length};
+  world.stats={quads:asset.count,sectors,blocks:asset.voxel.length,lighting:'baked sun visibility and voxel corner AO'};
   return world;
 }
