@@ -6,6 +6,7 @@ import {evaluateODMCollision} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 import {ODM_CABLE_SEGMENTS,writeODMCableCurve} from './odm-cable-visuals.js';
+import {aimODMArm} from './odm-arm-aim.js';
 import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
@@ -335,7 +336,8 @@ export function createPlayer(scene,world,camera){
       smoothBone(model.knees[i],flying?.28+clamp(-legAngle,0,.23):Math.max(0,legWalk)*.19+state.landingCompression,0,0,dt,14);
       const reach=state.hooks[i]?-.92:(flying?state.braking?.2:-.6:-side*walk*.36);
       const slashArc=slash*(i===0?-.6:.78)+(spinning?(i===0?-.9:.9):0);
-      smoothBone(model.arms[i],reach+slashArc,side*slash*.22+(spinning?side*.20:0),side*(spinning?.55:state.hitStun>0?.39:.09),dt,action.phase==='strike'?45:18);
+      if(state.hooks[i]&&action.kind==='idle')aimODMArm(model.arms[i],state.hooks[i].point,dt);
+      else smoothBone(model.arms[i],reach+slashArc,side*slash*.22+(spinning?side*.20:0),side*(spinning?.55:state.hitStun>0?.39:.09),dt,action.phase==='strike'?45:18);
       smoothBone(model.elbows[i],state.hooks[i]?-.25:flying?-.32:-.14,0,side*slash*.18,dt,17);
       model.blades[i].visible=state.blades>0||state.attackTimer>0;
     }
