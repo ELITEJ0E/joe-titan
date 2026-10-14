@@ -1,4 +1,5 @@
-import {readFileSync} from 'node:fs';
+import {readFileSync,existsSync} from 'node:fs';
+import {inflateSync} from 'node:zlib';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
@@ -21,6 +22,17 @@ for(const token of ['function fire','function release','function updateCamera','
 if(!main.includes('world=createVoxelWorld(scene)'))throw Error('Voxel city is not the active world');
 if(main.includes('installMedievalCity('))throw Error('Heavy GLB loader is still active');
 if(!world.includes('InstancedMesh'))throw Error('Voxel city must batch repeated blocks');
+// Optional authentic Minecraft region conversion can be uploaded after creator permission.
+const minecraftPath=new URL('../public/maps/shiganshina.jtvx',import.meta.url);
+if(existsSync(minecraftPath)){
+  const payload=inflateSync(readFileSync(minecraftPath));
+  if(payload.toString('ascii',0,4)!=='JTVX'||payload.readUInt16LE(4)!==1)throw Error('Minecraft map asset header invalid');
+  const nx=payload.readUInt16LE(6),ny=payload.readUInt16LE(8),nz=payload.readUInt16LE(10);
+  const faces=payload.readUInt32LE(12),paletteLen=payload.readUInt32LE(20);
+  const expected=24+paletteLen+nx*ny*nz+faces*9;
+  if(nx!==304||ny!==88||nz!==304||expected!==payload.length||faces<200000)throw Error('Minecraft world asset is truncated or wrong');
+  console.log('OK: authentic Minecraft Shiganshina map asset ('+faces+' quads) validated.');
+}
 if(!html.includes('type="importmap"'))throw Error('Standalone CDN import map is missing');
 console.log(`OK: gameplay JavaScript modules parse, ${[...new Set(ids)].length} HUD/overlay IDs resolve, core world and combat APIs exist.`);
 console.log('Browser/GPU validation: open /tests/browser.html using the development server.');
