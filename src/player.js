@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
-import {applyODMMotor} from './odm-motor.js';
+import {applyODMMotor,applyReferenceAirDrag,ODM_TUNING} from './odm-motor.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 
@@ -141,12 +141,14 @@ export function createPlayer(scene,world,camera){
     if(!point)return false;
     const dist=point.distanceTo(state.position);
     // A slack cable at attachment preserves momentum instead of snapping the body.
-    state.hooks[index]={point,length:Math.max(7,dist),age:0};
+    if(state.gas<ODM_TUNING.gasFire)return false;
+    state.gas=Math.max(0,state.gas-ODM_TUNING.gasFire);
+    state.hooks[index]={point,length:Math.max(ODM_TUNING.minCable,dist),age:0};
     // Moderate initial take-up without an artificial high-speed teleport.
-    state.velocity.addScaledVector(point.clone().sub(state.position).normalize(),3.8);
+    // The reference does not apply an artificial firing velocity impulse.
     // A cable fired above ground lifts the pilot off the street rather than
     // letting the walking controller pin the gear to the floor.
-    if(state.grounded&&point.y>state.position.y+3){state.velocity.y=Math.max(4.6,state.velocity.y);state.grounded=false;}
+    // Reference hooks do not give a free vertical launch from the ground.
     return true;
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
@@ -176,36 +178,41 @@ export function createPlayer(scene,world,camera){
     const activeHooks=state.hooks.filter(Boolean).length;
     if(state.grounded){
       const speedMultiplier=state.aspect?.speed||1;
-      const goal=wish.clone().multiplyScalar((reeling?15:10.5)*speedMultiplier);
-      groundVelocityBlend(state.velocity,goal,dt,activeHooks>0);
-      if(activeHooks)state.velocity.addScaledVector(wish,dt*16*speedMultiplier);
-      if(input.jumpQueued){state.velocity.y=12.6;state.grounded=false;}
+      const goal=wish.clone().multiplyScalar((reeling?ODM_TUNING.sprint:ODM_TUNING.run)*speedMultiplier);
+      groundVelocityBlend(state.velocity,goal,dt,false);
+      // Hook forces are handled independently of the running controller.
+      if(input.jumpQueued){state.velocity.y=9.6;state.grounded=false;}
       state.gas=clamp(state.gas+dt*15,0,100);
     }else{
-      const acceleration=(activeHooks?16:13)*(state.aspect?.speed||1);
+      const acceleration=(activeHooks?ODM_TUNING.hookAirControl:ODM_TUNING.airControl)*(state.aspect?.speed||1);
       state.velocity.addScaledVector(wish,dt*acceleration);
-      const drag=Math.exp(-dt*(activeHooks?.035:.21));state.velocity.x*=drag;state.velocity.z*=drag;
+      // The speed-dependent reference drag is applied after all forces.
     }
     input.jumpQueued=false;
     if(input.keys.has('Space')&&!state.grounded&&state.gas>0){
-      const dir=viewDirection();
-      // A little existing momentum bleeds into the thrust vector: releasing a
-      // fast swing into a boost no longer makes an abrupt ninety-degree turn.
-      const thrust=dir.multiplyScalar(.84).addScaledVector(state.velocity.clone().normalize(),.16).normalize();
-      state.velocity.addScaledVector(thrust,dt*(activeHooks?37:32)*(state.aspect?.boost||1));
-      state.velocity.y+=dt*5;state.gas=clamp(state.gas-dt*19,0,100);state.boost=true;
+      const aim=viewDirection();
+      const thrust=wish.lengthSq()>0?wish.clone().addScaledVector(aim,.65).normalize():aim;
+      state.velocity.addScaledVector(thrust,ODM_TUNING.boost*dt*(state.aspect?.boost||1));
+      state.velocity.y+=ODM_TUNING.gravity*ODM_TUNING.boostVerticalGravity*dt;
+      state.gas=Math.max(0,state.gas-ODM_TUNING.gasBoost*dt);state.boost=true;
     }else state.boost=false;
-    if(input.keys.has('KeyG')&&state.velocity.y<0&&state.gas>0){
-      state.velocity.y+=dt*34;state.gas=Math.max(0,state.gas-dt*6);
+    if(input.keys.has('KeyG')&&state.gas>0){
+      if(state.velocity.y< -2)state.velocity.y+=Math.min(-state.velocity.y-2,ODM_TUNING.brakeVertical*dt);
+      if(!activeHooks){
+        const k=Math.min(1,ODM_TUNING.brakeHorizontal*dt);
+        state.velocity.x*=1-k;state.velocity.z*=1-k;
+      }
+      state.gas=Math.max(0,state.gas-ODM_TUNING.gasBrake*dt);
     }
     // Attached cables reel automatically and supply responsive, bounded
     // winch thrust; Shift accelerates the reel. No teleporting or speed reset.
     state.gas=Math.max(0,state.gas-applyODMMotor(
       state.position,state.velocity,state.hooks,dt,
-      {reeling,gas:state.gas,reelMultiplier:state.aspect?.reel||1}));
+      {reeling,gas:state.gas,reelMultiplier:state.aspect?.reel||1,forwardPump:input.keys.has('KeyW')}));
     for(const hook of state.hooks)if(hook)hook.age+=dt;
-    state.velocity.y-=25*dt;
-    if(state.velocity.length()>77*(state.aspect?.speed||1))state.velocity.multiplyScalar(77*(state.aspect?.speed||1)/state.velocity.length());
+    state.velocity.y-=ODM_TUNING.gravity*dt;
+    if(!state.grounded)applyReferenceAirDrag(state.velocity,dt);
+    if(state.velocity.length()>ODM_TUNING.maxSpeed*(state.aspect?.speed||1))state.velocity.multiplyScalar(ODM_TUNING.maxSpeed*(state.aspect?.speed||1)/state.velocity.length());
     state.position.addScaledVector(state.velocity,dt);
     // Symmetric dual-cable solve: preserve velocity along each cable tangent.
     solveTetherConstraints(state.position,state.velocity,state.hooks);
