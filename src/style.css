@@ -49,3 +49,9 @@
 .graphics-menu-button:hover{background:#254759;color:#f4ffff}
 @media(max-width:1050px){.hud-right{gap:7px}.graphics-switch{font-size:8px;padding:8px 7px}.city-label{display:none}}
 @media(max-width:650px){.graphics-menu-button{font-size:9px;padding:11px 13px}}
+
+/* Preserve crisp voxels: subtle grade rather than the previous dark blanket. */
+.grain{opacity:.09}
+.vignette{opacity:.60}
+.visual-cinematic .grain{opacity:.13}
+.visual-cinematic .vignette{opacity:.82}
