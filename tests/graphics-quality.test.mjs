@@ -48,10 +48,10 @@ test('Shiganshina shader can create pixel atlas and switch quality without new g
 test('procedural fallback supports the same visual-quality API',()=>{
   const scene=new THREE.Scene(),world=createVoxelWorld(scene);
   assert.equal(typeof world.setVisualQuality,'function');
-  const fog=scene.fog;
+  const fog=scene.fog,performanceDensity=fog.density;
   world.setVisualQuality('cinematic');
   assert.equal(scene.fog,fog);
-  assert.ok(scene.fog.density>.0015);
+  assert.ok(scene.fog.density>performanceDensity,'cinematic has stronger atmosphere than performance');
   world.setVisualQuality('performance');
-  assert.ok(scene.fog.density<.0015);
+  assert.ok(Math.abs(scene.fog.density-performanceDensity)<1e-9);
 });

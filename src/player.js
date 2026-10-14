@@ -20,7 +20,7 @@ function smoothBone(node,x,y,z,dt,response=13){
   poseEuler.set(x,y,z,'XYZ');poseQuat.setFromEuler(poseEuler);
   node.quaternion.slerp(poseQuat,1-Math.exp(-Math.max(0,dt)*response));
 }
-const mat=(color,metalness=0,roughness=.7)=>new THREE.MeshLambertMaterial({color});
+const mat=(color,metalness=0,roughness=.7)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
 const jacket=mat(0xa87b4e,0,.91), shirt=mat(0xe4d9be,0,.95), pants=mat(0xede2cb,0,.94);
 const leather=mat(0x3d261c,0,.83), leatherLite=mat(0x77503a,0,.85), boot=mat(0x32251f,0,.76);
 const green=mat(0x284c3c,0,.94),greenDark=mat(0x193a30,0,.95),steel=mat(0x86939a,.72,.3),brightSteel=mat(0xc5d2d4,.68,.27);

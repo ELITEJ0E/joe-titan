@@ -14,7 +14,7 @@ test('player uses a blocky animated rig with separate elbows, knees and blades',
   assert.equal(model.knees.length,2);
   assert.equal(model.blades.length,2);
   assert.ok(model.headRig.children.some(c=>c.geometry?.type==='BoxGeometry'));
-  assert.equal(model.blades[0].material.type,'MeshLambertMaterial');
+  assert.equal(model.blades[0].material.type,'MeshStandardMaterial');
   const input={keys:new Set(['KeyW','Space']),jumpQueued:true};
   player.update(1/60,input,0.1);
   for(let i=1;i<80;i++)player.update(1/60,input,.1+i/60);
