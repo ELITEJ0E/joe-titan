@@ -125,7 +125,7 @@ export function createPlayer(scene,world,camera){
   const formBody=new THREE.Mesh(new THREE.CapsuleGeometry(.72,2.1,5,10),formMat);formBody.position.y=1.75;form.add(formBody);
   const formCore=new THREE.Mesh(new THREE.SphereGeometry(.34,12,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88}));formCore.position.y=2.7;form.add(formCore);form.visible=false;scene.add(form);
   const cameraAim=V(0,0,0);
-  const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,grounded:true,
+  const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grounded:true,
     hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false};
   camera.position.set(9,5,3);
   const heading=()=>V(-Math.sin(state.yaw),0,-Math.cos(state.yaw));
@@ -154,7 +154,7 @@ export function createPlayer(scene,world,camera){
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
   function reset(){
-    state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.grounded=true;state.aspect=null;form.visible=false;
+    state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.blades=8;state.grounded=true;state.aspect=null;form.visible=false;
     state.yaw=0;state.pitch=-.07;state.distance=0;state.speed=0;state.bank=0;state.boost=false;
     release(0);release(1);model.root.position.copy(state.position);model.root.rotation.set(0,0,0);model.tilt.rotation.set(0,0,0);
     cameraAim.copy(state.position).add(V(0,.9,0));
@@ -291,7 +291,8 @@ export function createPlayer(scene,world,camera){
   function takeDamage(amount){const reduced=amount*(1-(state.aspect?.armor||0));state.health=Math.max(0,state.health-reduced);if(state.health===0){reset();return {downed:true,amount:reduced};}return {downed:false,amount:reduced};}
   function heal(amount){state.health=clamp(state.health+amount,0,100);}
   function refillGas(amount){state.gas=clamp(state.gas+amount,0,100);}
-  function attack(){if(state.attackTimer>0)return false;state.attackTimer=.32;return true;}
+  function attack(){if(state.attackTimer>0||state.blades<=0)return false;state.attackTimer=.32;state.blades--;return true;}
+  function refillBlades(amount){state.blades=clamp(state.blades+amount,0,8);}
   function updateCamera(dt,snap=false){
     ensureValid();
     const aim=state.position.clone().add(V(0,.9,0)),dir=viewDirection();
@@ -320,5 +321,5 @@ export function createPlayer(scene,world,camera){
     model.root.visible=!state.firstPerson;
   }
   reset();
-  return {...state,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,attack,viewDirection,get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){state.firstPerson=v;}};
+  return {...state,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,attack,viewDirection,get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){state.firstPerson=v;}};
 }
