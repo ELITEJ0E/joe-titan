@@ -55,6 +55,10 @@ async function init(){
   try {
     world=await loadMinecraftWorld(scene);
     console.info('[JOE TITAN] Minecraft Shiganshina world loaded:',world.stats);
+    const cityLabel=document.querySelector('.city-label');
+    if(cityLabel?.lastChild?.nodeType===3)cityLabel.lastChild.textContent=' SHIGANSHINA · WALLED DISTRICT';
+    const mapLabel=document.querySelector('#mapPanel > div > span');
+    if(mapLabel)mapLabel.textContent='SHIGANSHINA · TACTICAL MAP';
   } catch(error) {
     console.info('[JOE TITAN] Optional Minecraft world unavailable; using procedural city:',error.message);
     world=createVoxelWorld(scene);
@@ -291,7 +295,7 @@ function hudUpdate(){
   }else if(missionMode==='survival'){
     $('beaconDistance').textContent=`${Math.max(0,90-elapsed).toFixed(0)} SEC`;$('checkpointNumber').textContent='HOLD';
     $('missionText').textContent='Last Light · Survive the Riftborn assault';
-  }else{$('beaconDistance').textContent='--';$('missionText').textContent='Free Flight · Explore Asterfell';}
+  }else{$('beaconDistance').textContent='--';$('missionText').textContent='Free Flight · Explore '+(world.style==='minecraft-world'?'Shiganshina':'Asterfell');}
   $('reticleText').textContent=l&&r?'DUAL ANCHOR LOCK':l?'LEFT CABLE ATTACHED':r?'RIGHT CABLE ATTACHED':'HOLD LMB / RMB TO GRAPPLE';
   if(!l&&!r){const target=player.target(0);$('reticle').classList.toggle('available',!!target);$('reticleText').textContent=target?`ANCHOR READY · ${Math.round(target.distanceTo(player.position))} M`:'NO ANCHOR IN RANGE';}
   else $('reticle').classList.remove('available');
