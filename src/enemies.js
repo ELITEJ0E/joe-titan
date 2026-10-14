@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {napeHit,segmentNapeHealth} from './reference-combat.js';
+import {createTitanProjectiles,BOULDER} from './titan-projectiles.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
@@ -82,12 +83,23 @@ export function createEnemyManager(scene,world){
     {type:'beast',position:[-58,0,112],patrol:[-94,0,128]}, {type:'armored',position:[135,0,8],patrol:[153,0,29]}
   ]);
   simulation.enemies.forEach(enemy=>humanoid(scene,enemy));
-  let slowTimer=0,decoyTimer=0,decoy=null;
-  function reset(){simulation.reset();slowTimer=0;decoyTimer=0;decoy=null;for(const enemy of simulation.enemies){if(enemy.group){enemy.group.visible=true;enemy.group.position.copy(enemy.position);}}}
+  const boulders=createTitanProjectiles(scene,world);
+  const throwTimers=new Map();let slowTimer=0,decoyTimer=0,decoy=null;
+  function reset(){simulation.reset();boulders.reset();throwTimers.clear();slowTimer=0;decoyTimer=0;decoy=null;for(const enemy of simulation.enemies){if(enemy.group){enemy.group.visible=true;enemy.group.position.copy(enemy.position);}}}
   function update(dt,playerPosition,time){
     slowTimer=Math.max(0,slowTimer-dt);decoyTimer=Math.max(0,decoyTimer-dt);
     const result=simulation.update(dt,playerPosition,decoyTimer>0?decoy:null,slowTimer>0?.48:1);
+    result.damage+=boulders.update(dt,playerPosition);
     for(const enemy of simulation.enemies){
+      if(enemy.alive&&enemy.type==='beast'){
+        const timer=Math.max(0,(throwTimers.get(enemy.id)||0)-dt);
+        const distance=enemy.position.distanceTo(playerPosition);
+        if(timer<=0&&distance>15&&distance<85){
+          const origin=enemy.position.clone().add(V(0,enemy.height*.77,0));
+          boulders.throwBoulder(origin,playerPosition.clone());
+          throwTimers.set(enemy.id,BOULDER.cooldown);
+        }else throwTimers.set(enemy.id,timer);
+      }
       if(!enemy.group)continue;enemy.group.visible=enemy.alive;enemy.group.position.copy(enemy.position);enemy.group.rotation.y=Math.atan2(enemy.forward.x,enemy.forward.z);
       const stride=Math.sin(time*(enemy.speed*2)+enemy.position.x)*.09;enemy.group.children[0].rotation.z=stride;
       if(enemy.weak)enemy.weak.scale.setScalar(enemy.state==='stagger'?1.65:1+Math.sin(time*4)*.16);
