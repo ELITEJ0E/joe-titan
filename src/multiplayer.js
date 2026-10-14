@@ -2,6 +2,8 @@ import {Peer} from 'peerjs';
 import * as THREE from 'three';
 import {encodeScoutState} from './reference-combat.js';
 import {remoteTarget,smoothFactor} from './network-interpolation.js';
+import {createScoutAvatarModel} from './player.js';
+import {applyRemoteScoutAppearance,animateRemoteScoutModel,disposeRemoteScoutVisual,scoutAppearanceIndex} from './scout-appearance.js';
 
 const COLORS=['#8fe8ff','#f4bd88','#c6a7ff','#9be6a0'];
 const ICE_SERVERS=[
@@ -36,34 +38,22 @@ function makeScoutNameTag(text,color){
   return sprite;
 }
 
-function makeRemoteAvatar(scene,index=0){
-  const group=new THREE.Group();
-  const accent=COLORS[index%COLORS.length];
-  const armor=new THREE.MeshStandardMaterial({color:accent,emissive:accent,emissiveIntensity:.28,roughness:.5,metalness:.18});
-  const dark=new THREE.MeshStandardMaterial({color:'#172532',roughness:.72,metalness:.35});
-  const glow=new THREE.MeshBasicMaterial({color:accent,transparent:true,opacity:.8});
-  const box=(w,h,d,material,position)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);mesh.position.set(...position);group.add(mesh);return mesh;};
-  const torso=box(.62,.78,.38,armor,[0,1.18,0]);torso.rotation.z=.02;
-  const chest=box(.42,.32,.405,dark,[0,1.34,-.015]);
-  const head=box(.48,.48,.46,dark,[0,1.78,0]);head.name='remote voxel head';
-  const visor=box(.3,.08,.27,glow,[0,1.8,-.21]);
-  const helmetRing=new THREE.Mesh(new THREE.TorusGeometry(.28,.025,6,16),glow);helmetRing.rotation.x=Math.PI/2;helmetRing.position.set(0,1.78,0);group.add(helmetRing);
-  const shoulderL=box(.2,.22,.28,armor,[-.43,1.42,0]);const shoulderR=box(.2,.22,.28,armor,[.43,1.42,0]);
-  shoulderL.rotation.z=-.18;shoulderR.rotation.z=.18;
-  box(.16,.58,.18,dark,[-.39,1.03,0]);box(.16,.58,.18,dark,[.39,1.03,0]);
-  box(.2,.68,.22,armor,[-.18,.38,0]);box(.2,.68,.22,armor,[.18,.38,0]);
-  box(.27,.12,.36,dark,[-.18,.02,-.03]);box(.27,.12,.36,dark,[.18,.02,-.03]);
-  const belt=new THREE.Mesh(new THREE.TorusGeometry(.37,.035,6,18),dark);belt.rotation.x=Math.PI/2;belt.position.y=.84;group.add(belt);
-  const reelL=new THREE.Mesh(new THREE.CylinderGeometry(.1,.1,.12,10),glow);reelL.rotation.z=Math.PI/2;reelL.position.set(-.4,.78,.08);group.add(reelL);
-  const reelR=reelL.clone();reelR.position.x=.4;group.add(reelR);
-  box(.08,.1,.7,glow,[-.39,.9,.2]).rotation.x=-.24;box(.08,.1,.7,glow,[.39,.9,.2]).rotation.x=-.24;
-  const jetL=new THREE.Mesh(new THREE.ConeGeometry(.1,.3,8),glow);jetL.rotation.x=-Math.PI/2;jetL.position.set(-.23,.72,.31);group.add(jetL);
-  const jetR=jetL.clone();jetR.position.x=.23;group.add(jetR);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(.72,.025,8,24),glow);ring.rotation.x=Math.PI/2;ring.position.y=.06;group.add(ring);
-  const tag=makeScoutNameTag('SCOUT '+String(index+1).padStart(2,'0'),accent);
-  if(tag)group.add(tag);
-  group.userData={accent,visor,ring,jetL,jetR,tag};
-  group.visible=false;scene.add(group);return group;
+function makeRemoteAvatar(scene,peerId=''){
+  // Replicated pilots are the SAME voxel scout body used by the local player,
+  // including face, jacket, cloak emblem, swords, ODM cylinders and joints.
+  // Remote-only construction omits unused local rope geometry and shadows.
+  const model=createScoutAvatarModel(scene,{remote:true});
+  const variant=scoutAppearanceIndex(peerId);
+  const appearance=applyRemoteScoutAppearance(model.root,{peerId});
+  const tint=['#8fe8ff','#f4bd88','#c6a7ff','#9be6a0','#ffd49a','#9dc7ed'][variant];
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.72,.025,8,24),
+    new THREE.MeshBasicMaterial({color:tint,transparent:true,opacity:.65,depthWrite:false}));
+  ring.rotation.x=Math.PI/2;ring.position.y=.06;model.root.add(ring);
+  const tag=makeScoutNameTag('SCOUT '+String(variant+1).padStart(2,'0'),tint);
+  if(tag)model.root.add(tag);
+  model.root.userData={model,appearance,ring,tag};
+  model.root.visible=false;
+  return model.root;
 }
 
 export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
@@ -90,12 +80,12 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
       const state={x:Number(p?.[0]??message.state?.x)||0,y:Number(p?.[1]??message.state?.y)||0,z:Number(p?.[2]??message.state?.z)||0,yaw:Number(message.state?.yaw)||0,aspect:String(message.state?.aspect||''),physics:encoded};
       state.receivedAt=performance.now()/1000;
       remoteStates.set(connection.peer,state);
-      let avatar=avatars.get(connection.peer);if(!avatar){avatar=makeRemoteAvatar(scene,avatars.size);avatars.set(connection.peer,avatar);}
+      let avatar=avatars.get(connection.peer);if(!avatar){avatar=makeRemoteAvatar(scene,connection.peer);avatars.set(connection.peer,avatar);}
       avatar.visible=true;avatar.rotation.y=state.yaw;
-      avatar.userData.ring.rotation.z+=.035;avatar.userData.jetL.scale.y=state.aspect?1.25:1;avatar.userData.jetR.scale.y=state.aspect?1.25:1;
+      avatar.userData.ring.material.opacity=state.aspect?.8:.65;
       onCount(connections.size);
     });
-    const close=()=>{clearTimeout(timeout);connections.delete(connection.peer);remoteStates.delete(connection.peer);const avatar=avatars.get(connection.peer);if(avatar){scene.remove(avatar);avatar.traverse((node)=>{node.geometry?.dispose?.();node.material?.map?.dispose?.();node.material?.dispose?.();});avatars.delete(connection.peer);}onCount(connections.size);if(!timedOut)setStatus(connections.size?'CONNECTED':'READY',connections.size?`${connections.size} pilot online`:'Room ready');};
+    const close=()=>{clearTimeout(timeout);connections.delete(connection.peer);remoteStates.delete(connection.peer);const avatar=avatars.get(connection.peer);if(avatar){scene.remove(avatar);disposeRemoteScoutVisual(avatar);avatars.delete(connection.peer);}onCount(connections.size);if(!timedOut)setStatus(connections.size?'CONNECTED':'READY',connections.size?`${connections.size} pilot online`:'Room ready');};
     connection.on('close',close);connection.on('error',()=>{timedOut=true;setStatus('ERROR','ROOM CONNECTION FAILED · RETRY JOIN');close();});
   };
   return {
@@ -105,6 +95,8 @@ export function createMultiplayer(scene,{onStatus=()=>{},onCount=()=>{}}={}){
         const avatar=avatars.get(id);if(!avatar)continue;
         const pos=remoteTarget(state,now-state.receivedAt);
         avatar.position.lerp(new THREE.Vector3(...pos),smoothFactor(dt));
+        animateRemoteScoutModel(avatar.userData.model,state.physics,dt,now);
+        avatar.userData.ring.rotation.z+=dt*.7;
       }
     },
     start:ensurePeer,

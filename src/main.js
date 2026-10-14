@@ -13,6 +13,7 @@ import {createMultiplayer} from './multiplayer.js';
 import {MISSION_MODES,MISSION_RECORDS_KEY,readMissionRecords,recordMission} from './missions.js';
 import {createScoutCutEffects} from './scout-cut-effects.js';
 import {escapeAction,titleCameraPose} from './menu-presentation.js';
+import {needsMouseCapture,captureClickAction,shouldPauseForUnlock} from './mouse-capture.js';
 
 const $=(id)=>document.getElementById(id);
 const canvas=$('game');
@@ -104,10 +105,32 @@ async function init(){
 }
 function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();if(graphics)graphics.resize();else renderer.setSize(innerWidth,innerHeight,false);}
 function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileInput.look={x:0,y:0};mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');player?.release(0);player?.release(1);}
+function mouseCaptureState(){
+  return {started,paused,finished,
+    coarsePointer:matchMedia('(pointer: coarse)').matches,
+    locked:document.pointerLockElement===canvas};
+}
+function refreshCaptureHint(){
+  const waiting=needsMouseCapture(mouseCaptureState());
+  $('captureHint')?.classList.toggle('hidden',!waiting);
+  document.body.classList.toggle('mouse-locked',document.pointerLockElement===canvas);
+}
 function requestControl(){
-  if(matchMedia('(pointer: coarse)').matches)return;
-  if(document.pointerLockElement!==canvas&&canvas.requestPointerLock){
-    try{const result=canvas.requestPointerLock();result?.catch?.(()=>{showToast('MOUSE CAPTURE UNAVAILABLE · DRAG TO AIM OR USE ARROW KEYS');});}catch{showToast('DRAG TO AIM · Q / E TO GRAPPLE');}
+  if(!needsMouseCapture(mouseCaptureState())){refreshCaptureHint();return;}
+  // Escape unlocks are sometimes temporarily blocked by the browser.
+  // Keep the game responsive, show a retry hint, and let the next real click
+  // on the canvas re-request pointer lock (instead of firing a stray hook).
+  refreshCaptureHint();
+  if(!canvas.requestPointerLock)return;
+  try{
+    const result=canvas.requestPointerLock();
+    result?.catch?.(()=>{
+      refreshCaptureHint();
+      if(needsMouseCapture(mouseCaptureState()))showToast('CLICK THE GAME TO RECAPTURE THE MOUSE');
+    });
+  }catch{
+    refreshCaptureHint();
+    if(needsMouseCapture(mouseCaptureState()))showToast('CLICK THE GAME TO RECAPTURE THE MOUSE');
   }
 }
 async function enterImmersive(){
@@ -123,13 +146,14 @@ function startOrResume(){
   if(matchMedia('(pointer: coarse)').matches)enterImmersive();
   requestControl();
 }
-function halt(){if(!started||finished||paused)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Press ESC again to resume, or return to the main menu.';}
+function halt(){if(!started||finished||paused)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Press ESC again to resume, or return to the main menu.';refreshCaptureHint();}
 function quitToMainMenu(){
   if(document.pointerLockElement===canvas)document.exitPointerLock();
   clearInputs();started=false;paused=false;finished=false;accumulator=0;
   hud.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.add('hidden');
   mobileControls?.classList.add('hidden');menu.classList.remove('hidden');
   world.setMenuClarity?.(true);
+  refreshCaptureHint();
   updateMissionBoard();
   document.activeElement?.blur?.();
 }
@@ -265,8 +289,9 @@ function attachEvents(){
   document.addEventListener('visibilitychange',()=>{if(document.hidden)halt();});
   document.addEventListener('pointerlockchange',()=>{
     const locked=document.pointerLockElement===canvas;
-    if(hadPointerLock&&!locked&&started&&!paused&&!finished)halt();
+    if(shouldPauseForUnlock({wasLocked:hadPointerLock,locked,started,paused,finished}))halt();
     hadPointerLock=locked;
+    refreshCaptureHint();
   });
   document.addEventListener('mousemove',(event)=>{
     if(!started||paused||finished)return;
@@ -276,8 +301,15 @@ function attachEvents(){
     player.pitch-=event.movementY*sensitivity;
   });
   canvas.addEventListener('mousedown',(event)=>{
-    if(!started||paused||finished)return;
+    const action=captureClickAction(mouseCaptureState());
+    if(action==='ignore')return;
     canvas.focus();
+    if(action==='capture'){
+      event.preventDefault();
+      requestControl();
+      // Do NOT fire a hook on the click used to regain mouse control.
+      return;
+    }
     if(event.button===0){input.mouse.left=true;if(player.fire(0))playBeep();}
     else if(event.button===2){input.mouse.right=true;if(player.fire(1))playBeep();}
   });
