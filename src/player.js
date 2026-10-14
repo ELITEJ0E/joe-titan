@@ -5,6 +5,7 @@ import {applyDirectionalGasBoost} from './odm-gas-propulsion.js';
 import {evaluateODMCollision} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
+import {ODM_CABLE_SEGMENTS,writeODMCableCurve} from './odm-cable-visuals.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
@@ -118,7 +119,7 @@ function avatar(scene){
   shadow.rotation.x=-Math.PI/2;scene.add(shadow);
   const ropeLines=[],tips=[];
   for(const s of [-1,1]){
-    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array((ODM_CABLE_SEGMENTS+1)*3),3));
     const line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:s<0?0xc6d9df:0xbfcad1,transparent:true,opacity:.96}));
     line.visible=false;line.frustumCulled=false;scene.add(line);ropeLines.push(line);
     const tip=mesh(scene,new THREE.IcosahedronGeometry(.3,1),brightSteel);tip.visible=false;tips.push(tip);
@@ -327,7 +328,9 @@ export function createPlayer(scene,world,camera){
       if(!hook)continue;
       const start=V(i===0?-.67:.67,.18,-.65).applyAxisAngle(V(0,1,0),model.root.rotation.y).add(state.position);
       const arr=line.geometry.attributes.position.array;
-      arr[0]=start.x;arr[1]=start.y;arr[2]=start.z;arr[3]=hook.point.x;arr[4]=hook.point.y;arr[5]=hook.point.z;
+      writeODMCableCurve(arr,start,hook.point,{
+        length:hook.length,speed:state.speed,time,side:i===0?-1:1
+      });
       line.geometry.attributes.position.needsUpdate=true;
       tip.position.copy(hook.point);tip.rotation.x+=dt*2.2;tip.rotation.z+=dt*1.4;
     }
