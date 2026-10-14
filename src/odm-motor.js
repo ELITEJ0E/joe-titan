@@ -26,6 +26,12 @@ export function applyODMMotor(position,velocity,hooks,dt,{reeling=false,gas=100,
       const minimum=other?Math.max(ODM_TUNING.minCable,hook.point.distanceTo(other.point)-other.length+.001):ODM_TUNING.minCable;
       hook.length=Math.max(minimum,Math.min(hook.length,dist)-reel*dt);
       velocity.addScaledVector(toward,(ODM_TUNING.autoPull+(ODM_TUNING.fastPull-ODM_TUNING.autoPull)*reelK)*dt);
+      // Closing-speed brake: avoid accelerating directly into an anchor.
+      // Tangential velocity is untouched, so the swing still carries through.
+      const room=Math.max(0,dist-ODM_TUNING.minCable);
+      const closingCap=Math.sqrt(2*55*room)+3;
+      const closing=velocity.dot(toward);
+      if(closing>closingCap)velocity.addScaledVector(toward,-(closing-closingCap)*Math.min(1,14*dt));
     }
     if(forwardPump){
       const radial=velocity.dot(toward);

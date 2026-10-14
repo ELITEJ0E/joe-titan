@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {gasThrustDirection,applyGazeGasBoost,allowBoostCablePayout} from '../src/odm-gas-propulsion.js';
+import {gasThrustDirection,applyGazeGasBoost,allowBoostCablePayout,directionalGasThrust,applyDirectionalGasBoost} from '../src/odm-gas-propulsion.js';
 import {solveTetherConstraints} from '../src/odm-physics.js';
 import {applyODMMotor,ODM_TUNING} from '../src/odm-motor.js';
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
@@ -44,4 +44,29 @@ test('legacy cable-payout helper remains isolated and unused by player reference
   const paid=allowBoostCablePayout(pos,V(0,0,30),[hook],.1,{boosting:true,gas:50});
   assert.ok(paid>0);
   assert.ok(hook.length>10);
+});
+
+test('directional jet follows strafe input rather than looking forward',()=>{
+  const forward=directionalGasThrust(0,0,0,1);
+  const strafe=directionalGasThrust(0,0,1,0);
+  assert.ok(forward.z<-.9);
+  assert.ok(strafe.x>.9);
+  assert.ok(Math.abs(strafe.z)<1e-10);
+  assert.ok(strafe.y>0,'reference jet has vertical steering bias');
+});
+
+test('directional gas adds gravity-relative lift without replacing swing velocity',()=>{
+  const v=V(12,-10,-4);
+  applyDirectionalGasBoost(v,0,0,0,1,.1);
+  assert.equal(v.x,12);
+  assert.ok(v.z < -7.2 && v.z > -7.6);
+  assert.ok(v.y > -8.2 && v.y < -7.6);
+});
+
+test('reference gas boost cushions only sufficiently fast descent',()=>{
+  const fast=V(0,-35,0),slow=V(0,-3,0);
+  applyDirectionalGasBoost(fast,0,0,0,0,.1,{acceleration:0,gravity:0});
+  applyDirectionalGasBoost(slow,0,0,0,0,.1,{acceleration:0,gravity:0});
+  assert.equal(fast.y,-30);
+  assert.equal(slow.y,-3);
 });
