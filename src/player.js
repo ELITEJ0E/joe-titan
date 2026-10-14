@@ -104,7 +104,17 @@ function avatar(scene){
     const jet=new THREE.Mesh(new THREE.ConeGeometry(.19,1.7,9),m);
     jet.rotation.x=Math.PI/2;jet.visible=false;tilt.add(jet);jet.position.set(i?-.48:.48,.05,.52);jets.push(jet);
   }
-  return {root,tilt,arms,legs,capeL,capeR,shadow,ropeLines,tips,jets};
+  // Two cheap camera-readable airflow streaks, only active in fast flight.
+  const windTrails=[];
+  for(const side of [-1,1]){
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+    const line=new THREE.Line(geometry,new THREE.LineBasicMaterial({
+      color:side<0?0xb1eaff:0xd1f1ff,transparent:true,opacity:.34,depthWrite:false
+    }));
+    line.visible=false;line.frustumCulled=false;scene.add(line);windTrails.push(line);
+  }
+  return {root,tilt,arms,legs,capeL,capeR,shadow,ropeLines,tips,jets,windTrails};
 }
 export function createPlayer(scene,world,camera){
   const model=avatar(scene);
@@ -247,6 +257,18 @@ export function createPlayer(scene,world,camera){
       tip.position.copy(hook.point);tip.rotation.x+=dt*2.2;tip.rotation.z+=dt*1.4;
     }
     for(let i=0;i<2;i++){const jet=model.jets[i];jet.visible=state.boost;jet.scale.set(1,1+Math.sin(time*40+i)*.28,1);}
+    const fastFlight=!state.grounded&&state.speed>23;
+    const flightTail=state.velocity.clone().normalize().multiplyScalar(-clamp(state.speed*.13,2.5,9));
+    for(let i=0;i<2;i++){
+      const trail=model.windTrails[i];trail.visible=fastFlight;
+      if(!fastFlight)continue;
+      const p=trail.geometry.attributes.position.array;
+      const side=i===0?-.48:.48,start=V(side,.2,.5).applyAxisAngle(V(0,1,0),model.root.rotation.y).add(state.position);
+      p[0]=start.x;p[1]=start.y;p[2]=start.z;
+      p[3]=start.x+flightTail.x;p[4]=start.y+flightTail.y;p[5]=start.z+flightTail.z;
+      trail.material.opacity=clamp(.14+(state.speed-23)*.004,.14,.40);
+      trail.geometry.attributes.position.needsUpdate=true;
+    }
     model.shadow.position.set(state.position.x,.012,state.position.z);
     model.shadow.material.opacity=clamp(.24-state.position.y*.002,.05,.23);
     model.shadow.scale.setScalar(1+Math.min(state.position.y/32,4));
