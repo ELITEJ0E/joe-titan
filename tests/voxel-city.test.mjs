@@ -8,6 +8,8 @@ test('voxel city generates batched buildings, walls and six usable beacons',()=>
   const scene=new THREE.Scene(),world=createVoxelWorld(scene);
   assert.equal(world.style,'voxel');
   assert.ok(world.stats.houses>35,'city should have multiple dense districts');
+  assert.ok(world.stats.mountainColumns>900,'rocky valley should surround the town');
+  assert.ok(world.stats.landmarks.includes('castle'),'reference landmark pass should be active');
   assert.ok(world.stats.instances>1500,'buildings should contain voxel details');
   assert.ok(world.stats.drawMeshes<350,'city should use batching rather than per-cube draws');
   assert.ok(world.colliders.length>50,'colliders must match the city buildings');
