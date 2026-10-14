@@ -6,6 +6,7 @@ import {createEnemySimulation,strikeWeakPoint} from '../src/enemies.js';
 import {createPlayer} from '../src/player.js';
 import {BOULDER,createTitanProjectiles} from '../src/titan-projectiles.js';
 import {createSupplyDrops} from '../src/supplies.js';
+import {createRangedCombat} from '../src/ranged-combat.js';
 import {remoteTarget,smoothFactor,MAX_EXTRAPOLATION} from '../src/network-interpolation.js';
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 test('REA ballistics: bullet speed, gravity, life and cooldown',()=>{
@@ -115,4 +116,25 @@ test('remote physics packets interpolate smoothly and extrapolate for no more th
  assert.ok(Math.abs(capped[0]-(10+20*MAX_EXTRAPOLATION))<1e-9);
  assert.ok(smoothFactor(1/60)>0&&smoothFactor(1/60)<1);
  assert.equal(smoothFactor(0),0);
+});
+
+test('live scout pistol enforces fire cadence, eight-round magazine and timed reload',()=>{
+ const scene=new THREE.Scene(),world={grappleRay:()=>null};
+ const ranged=createRangedCombat(scene,world,{enemies:[]});
+ const p=V(0,10,0),dir=V(1,0,0);
+ assert.equal(ranged.fire(p,dir),true);
+ assert.equal(ranged.ammo,7);
+ assert.equal(ranged.fire(p,dir),false,'cooldown prevents immediate second shot');
+ for(let i=0;i<7;i++){
+   ranged.update(.29);
+   assert.equal(ranged.fire(p,dir),true);
+ }
+ assert.equal(ranged.ammo,0);
+ assert.ok(ranged.reload>0);
+ assert.equal(ranged.fire(p,dir),false);
+ ranged.update(1.6);
+ assert.equal(ranged.ammo,8);
+ assert.equal(ranged.fire(p,dir),true);
+ ranged.reset();
+ assert.equal(ranged.ammo,8);
 });
