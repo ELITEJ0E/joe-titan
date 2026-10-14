@@ -6,6 +6,7 @@ import {createEnemySimulation,strikeWeakPoint} from '../src/enemies.js';
 import {createPlayer} from '../src/player.js';
 import {BOULDER,createTitanProjectiles} from '../src/titan-projectiles.js';
 import {createSupplyDrops} from '../src/supplies.js';
+import {remoteTarget,smoothFactor,MAX_EXTRAPOLATION} from '../src/network-interpolation.js';
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 test('REA ballistics: bullet speed, gravity, life and cooldown',()=>{
   assert.equal(REFERENCE_COMBAT.bulletSpeed,110);
@@ -104,4 +105,14 @@ test('collectible supplies grant source-measured amounts and two blade charges',
  assert.equal(supplies.update(.05,0,player),'blades');
  assert.deepEqual(increments,[['blades',2]]);
  assert.equal(supplies.update(.05,.05,player),null);
+});
+
+test('remote physics packets interpolate smoothly and extrapolate for no more than 120ms',()=>{
+ const state={x:0,y:0,z:0,physics:{p:[10,20,-30],v:[20,-5,10]}};
+ assert.deepEqual(remoteTarget(state,0),[10,20,-30]);
+ assert.deepEqual(remoteTarget(state,.1),[12,19.5,-29]);
+ const capped=remoteTarget(state,1);
+ assert.ok(Math.abs(capped[0]-(10+20*MAX_EXTRAPOLATION))<1e-9);
+ assert.ok(smoothFactor(1/60)>0&&smoothFactor(1/60)<1);
+ assert.equal(smoothFactor(0),0);
 });
