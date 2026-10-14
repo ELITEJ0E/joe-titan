@@ -22,12 +22,12 @@ export function slideVoxelHorizontal(position,previous,velocity,solid,{
     const y=previous.y+dy*i/steps;
     if(!blockedX){
       const proposed=x+dx/steps;
-      if(probe(proposed,y,z)){blockedX=true;velocity.x=0;}
+      if(probe(proposed,y,z)){blockedX=true;velocity.x*=-.05;}
       else x=proposed;
     }
     if(!blockedZ){
       const proposed=z+dz/steps;
-      if(probe(x,y,proposed)){blockedZ=true;velocity.z=0;}
+      if(probe(x,y,proposed)){blockedZ=true;velocity.z*=-.05;}
       else z=proposed;
     }
   }
