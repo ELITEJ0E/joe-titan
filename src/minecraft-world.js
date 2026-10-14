@@ -21,14 +21,16 @@ function unpack(buffer){
   if(data.length!==start+size+count*9)throw Error('Truncated Shiganshina map');
   return {nx,ny,nz,count,colors,voxel:data.subarray(start,start+size),quads:new DataView(buffer,start+size,count*9)};
 }
-function createSectors(scene,asset,material){
+function createSectors(scene,asset,material,waterMaterial=material){
   const bins=new Map(),d=asset.quads;
   for(let i=0;i<asset.count;i++){
-    const offset=i*9,key=(d.getUint16(offset,true)>>4)+','+(d.getUint16(offset+3,true)>>4);
+    const offset=i*9;
+    const isWater=d.getUint8(offset+7)===17;
+    const key=(d.getUint16(offset,true)>>4)+','+(d.getUint16(offset+3,true)>>4)+(isWater?',water':',solid');
     if(!bins.has(key))bins.set(key,[]);
     bins.get(key).push(offset);
   }
-  for(const offsets of bins.values()){
+  for(const [bin,offsets] of bins){
     const n=offsets.length,positions=new Float32Array(n*12),normals=new Float32Array(n*12),uvs=new Float32Array(n*8),tiles=new Float32Array(n*4),shadows=new Float32Array(n*4),occlusion=new Float32Array(n*4);
     const indices=n*4>65535?new Uint32Array(n*6):new Uint16Array(n*6);
     for(let i=0;i<n;i++){
@@ -58,7 +60,10 @@ function createSectors(scene,asset,material){
     geometry.setAttribute('aShadow',new THREE.BufferAttribute(shadows,1));
     geometry.setAttribute('aAO',new THREE.BufferAttribute(occlusion,1));
     geometry.setIndex(new THREE.BufferAttribute(indices,1));geometry.computeBoundingSphere();
-    const mesh=new THREE.Mesh(geometry,material);mesh.name='Shiganshina sector';mesh.frustumCulled=true;
+    const water=bin.endsWith(',water');
+    const mesh=new THREE.Mesh(geometry,water?waterMaterial:material);
+    mesh.name=water?'Shiganshina water sector':'Shiganshina sector';
+    mesh.frustumCulled=true;mesh.renderOrder=water?1:0;
     scene.add(mesh);
   }
   return bins.size;
@@ -171,7 +176,7 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   // The full-detail converted world now shares a configurable, original
   // Minecraft-shader-inspired light and texture pipeline (no extra geometry).
   const visuals=createShiganshinaVisuals(scene,asset.colors,'performance');
-  const sectors=createSectors(scene,asset,visuals.material);
+  const sectors=createSectors(scene,asset,visuals.material,visuals.waterMaterial);
   installVoxelPhysics(world,asset);
   // The former fixed (-30,19,29) point was inside authored masonry.
   // Choose a genuinely outdoor, clear-headed street using the loaded voxels.
@@ -182,6 +187,7 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   const animateMissions=world.animate;
   world.animate=(time,dt)=>{visuals.animate(time);animateMissions(time,dt);};
   world.setVisualQuality=visuals.setQuality;
+  world.setAtmosphere=visuals.setAtmosphere;
   world.setMenuClarity=visuals.setMenuClarity;
   world.stats={quads:asset.count,sectors,blocks:asset.voxel.length,lighting:'baked sun visibility and voxel corner AO'};
   return world;
