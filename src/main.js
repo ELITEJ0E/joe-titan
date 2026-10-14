@@ -49,8 +49,11 @@ function init(){
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.14;
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.15,1600);
-  world=createWorld(scene);player=createPlayer(scene,world,camera);
+  world=createWorld(scene);
+  // Snapshot only scenery before creating gameplay actors: removing the old map
+  // must never remove the player's character, ropes or transformation effects.
   const oldWorldObjects=new Set(scene.children);
+  player=createPlayer(scene,world,camera);
   installMedievalCity(scene,world,oldWorldObjects,{
     onReady:({meshes,anchors,spawn})=>{
       if(!started || paused)player.reset();
