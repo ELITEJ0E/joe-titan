@@ -80,9 +80,13 @@ test('armored Titan grab requires seven unique escape inputs and freezes pilot',
 });
 test('Armored attack initiates zero-damage grab',()=>{
  const sim=createEnemySimulation([{type:'armored',position:[0,0,0],patrol:[0,0,0]}]);
- const result=sim.update(.1,V(1,1,1));
- assert.equal(result.grab,true);
- assert.equal(result.damage,0);
+ let grabbed=false;
+ for(let i=0;i<30;i++){
+   const result=sim.update(.05,V(1,1,1));
+   grabbed ||= result.grab;
+   assert.equal(result.damage,0);
+ }
+ assert.equal(grabbed,true,'armored grab should land after windup and lunge');
 });
 test('Beast boulder launches at measured speed and disappears on world collision',()=>{
  const scene=new THREE.Scene(),world={grappleRay:()=>null};
