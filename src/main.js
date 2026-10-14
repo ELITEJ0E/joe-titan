@@ -153,7 +153,7 @@ function resolveBladeStrike(kind='slash'){
   const offsets=kind==='spin'?[-Math.PI/2,0,Math.PI/2,Math.PI]:[0];
   for(const angle of offsets){
     const ray=aim.clone().applyAxisAngle(new THREE.Vector3(0,1,0),angle);
-    result=enemies.strike(origin,ray,damage);
+    result=enemies.strikeArc(origin,ray,damage,{spin:kind==='spin'});
     if(result.hit)break;
     if(sever.kind!=='limb')sever=enemies.severArm(origin,ray);
   }
