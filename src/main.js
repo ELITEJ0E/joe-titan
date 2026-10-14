@@ -49,8 +49,9 @@ async function init(){
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.14;
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.15,1600);
-  // Build the lightweight voxel city directly. No old procedural map or giant
-  // GLB is constructed, fetched, raycast, or temporarily allocated.
+  // Prefer the converted Java Minecraft district when its licensed asset is
+  // installed. Otherwise create the lightweight original voxel city.
+  // The legacy realistic GLB is never fetched or allocated.
   try {
     world=await loadMinecraftWorld(scene);
     console.info('[JOE TITAN] Minecraft Shiganshina world loaded:',world.stats);
