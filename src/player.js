@@ -6,6 +6,7 @@ import {evaluateODMCollision} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 import {ODM_CABLE_SEGMENTS,writeODMCableCurve} from './odm-cable-visuals.js';
+import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
@@ -148,7 +149,7 @@ export function createPlayer(scene,world,camera){
   const formBody=new THREE.Mesh(new THREE.CapsuleGeometry(.72,2.1,5,10),formMat);formBody.position.y=1.75;form.add(formBody);
   const formCore=new THREE.Mesh(new THREE.SphereGeometry(.34,12,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88}));formCore.position.y=2.7;form.add(formCore);form.visible=false;scene.add(form);
   const cameraAim=V(0,0,0);
-  const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grabbed:false,grabEscape:0,grounded:true,
+  const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grabbed:false,grabEscape:0,grabProgress:createEscapeProgress(),grounded:true,
     hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false,
     flightClock:0,lastGearAt:-Infinity,lastImpactAt:-Infinity,impactFeedback:0,combat:createScoutAttackState()};
   camera.position.set(9,5,3);
@@ -178,7 +179,7 @@ export function createPlayer(scene,world,camera){
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
   function reset(){
-    state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.blades=8;state.grabbed=false;state.grabEscape=0;state.grounded=true;state.aspect=null;form.visible=false;
+    state.position.copy(world.spawnPoint||DEPLOYMENT_POINT);state.velocity.set(0,0,0);state.gas=100;state.health=100;state.blades=8;state.grabbed=false;state.grabEscape=0;state.grabProgress=createEscapeProgress();state.grounded=true;state.aspect=null;form.visible=false;
     state.yaw=0;state.pitch=-.07;state.distance=0;state.speed=0;state.bank=0;state.boost=false;
     state.flightClock=0;state.lastGearAt=-Infinity;state.lastImpactAt=-Infinity;state.impactFeedback=0;
     resetScoutAttack(state.combat);
@@ -370,10 +371,16 @@ export function createPlayer(scene,world,camera){
   }
   function consumeAttackHit(){return consumeScoutHit(state.combat);}
   function refillBlades(amount){state.blades=clamp(state.blades+amount,0,8);}
-  function grab(){if(state.grabbed)return false;resetScoutAttack(state.combat);state.grabbed=true;state.grabEscape=0;state.velocity.set(0,0,0);release(0);release(1);return true;}
-  function escapeGrab(){if(!state.grabbed)return {active:false,remaining:0};state.grabEscape++;
-    if(state.grabEscape>=7){state.grabbed=false;state.grabEscape=0;state.velocity.y=3;return {active:false,remaining:0};}
-    return {active:true,remaining:7-state.grabEscape};}
+  function grab(){if(state.grabbed)return false;resetScoutAttack(state.combat);state.grabbed=true;state.grabEscape=0;state.grabProgress=createEscapeProgress();state.velocity.set(0,0,0);release(0);release(1);return true;}
+  function escapeGrab(key='',time=null){
+    if(!state.grabbed)return {active:false,remaining:0};
+    const result=registerEscapePress(state.grabProgress,{key,time});
+    state.grabEscape=GRAB_ESCAPE.presses-result.remaining;
+    if(!result.active){
+      state.grabbed=false;state.grabEscape=0;state.grabProgress=createEscapeProgress();state.velocity.y=3;
+    }
+    return result;
+  }
   function updateCamera(dt,snap=false){
     ensureValid();
     const aim=state.position.clone().add(V(0,.9,0)),dir=viewDirection();
