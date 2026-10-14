@@ -63,7 +63,7 @@ export function decorateReferenceLandmarks({block,world,rng}){
   for(let z=-103;z<=-73;z+=15)arch(cx,z,18,13,31);
   put('roofOrange',cx,50,cz,27,1.5,26);
   put('gold',cx,51,cz,6,1.8,27);
-  for(let x=-71;x<=-35;x+=9)arch(x,-90,8,27,0);
+  for(let x=-71;x<=-35;x+=9)arch(x,-90,8,39,0);
   put('limestone',-53,40,-90,42,3.5,8);
   for(let x=-72;x<=-33;x+=5.5)for(const z of [-94,-86])put('stoneDark',x,43,z,3,2.1,1.6);
   // Cathedral: lancet windows, buttresses, pinnacles, stained-glass rose
@@ -97,6 +97,9 @@ export function decorateReferenceLandmarks({block,world,rng}){
     put(i%3===0?'banner':i%3===1?'trim':'roofOrange',x,5.2,z,4,1,3.3);
     put('timber',x,4,z,.3,2,.3);
   }
+  // Narrow sheltered tidal bay ensures the boats actually rest on water, not grass.
+  put('sand',0,-.01,139,342,.18,5);
+  put('water',0,-.07,158,342,.2,32);
   // Quays, wooden piers and original stylized ships recall the island render.
   for(const x of [-123,-77,-31,24,79,126]){
     put('wood',x,1.1,152,6,2,24);
