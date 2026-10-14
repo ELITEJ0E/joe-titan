@@ -86,3 +86,34 @@ export function disposeRemoteScoutVisual(root){
   for(const m of materials)m.dispose();
   for(const g of meshes)g.dispose();
 }
+
+
+// Lightweight shared animation policy for replicated scout snapshots. These
+// values animate the authoritative remote position rather than changing it.
+export function animateRemoteScoutModel(model,physics,dt,time=0){
+  if(!model)return;
+  const flags=Number(physics?.f)||0;
+  const grounded=(flags&1)!==0,boosting=(flags&2)!==0;
+  const velocity=Array.isArray(physics?.v)?physics.v:[0,0,0];
+  const speed=Math.hypot(Number(velocity[0])||0,Number(velocity[1])||0,Number(velocity[2])||0);
+  const flat=Math.hypot(Number(velocity[0])||0,Number(velocity[2])||0);
+  const turnRate=1-Math.exp(-Math.max(0,dt)*12);
+  const flying=!grounded;
+  const walk=grounded?Math.sin(time*Math.max(3,flat*.8))*Math.min(1,flat/8):0;
+  model.tilt.rotation.x+=( (flying?-.16-Math.min(.37,speed/110):0)-model.tilt.rotation.x)*turnRate;
+  model.tilt.position.y*=1-turnRate;
+  model.headRig.rotation.x+=((flying?-.08:0)-model.headRig.rotation.x)*turnRate;
+  for(let i=0;i<2;i++){
+    const sign=i===0?-1:1;
+    const arm=model.arms[i],leg=model.legs[i],elbow=model.elbows[i],knee=model.knees[i];
+    arm.rotation.x+=((flying?-.67:-sign*walk*.44)-arm.rotation.x)*turnRate;
+    leg.rotation.x+=((flying?-.42:sign*walk*.55)-leg.rotation.x)*turnRate;
+    elbow.rotation.x+=((flying?-.28:-.13)-elbow.rotation.x)*turnRate;
+    knee.rotation.x+=((flying?.28:Math.max(0,sign*walk)*.27)-knee.rotation.x)*turnRate;
+    model.jets[i].visible=boosting;
+    model.jets[i].scale.y=boosting?1+Math.sin(time*36+i)*.18:1;
+    model.blades[i].visible=true;
+  }
+  model.capeL.rotation.x=-.19-Math.min(.4,speed*.007);
+  model.capeR.rotation.x=-.19-Math.min(.4,speed*.007);
+}
