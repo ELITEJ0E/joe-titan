@@ -18,6 +18,11 @@ for(const token of ['grappleRay','bestAnchor','resolveCollision','setBeaconActiv
 for(const token of ['function fire','function release','function updateCamera','hook.length','state.boost']){
   if(!player.includes(token))throw Error(`Missing movement feature ${token}`);
 }
+// Importing a replacement map must not remove the player from the scene.
+// Snapshot old scenery before createPlayer adds its model, ropes and effects.
+const snapshot=main.indexOf('const oldWorldObjects=new Set(scene.children)');
+const playerCreation=main.indexOf('player=createPlayer(scene,world,camera)');
+if(snapshot===-1||playerCreation===-1||snapshot>playerCreation)throw Error('Imported city scenery snapshot includes player avatar');
 if(!html.includes('type="importmap"'))throw Error('Standalone CDN import map is missing');
 console.log(`OK: 9 JavaScript modules parse, ${[...new Set(ids)].length} HUD/overlay IDs resolve, core world and combat APIs exist.`);
 console.log('Browser/GPU validation: open /tests/browser.html using the development server.');
