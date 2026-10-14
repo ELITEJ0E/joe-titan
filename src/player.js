@@ -319,7 +319,11 @@ export function createPlayer(scene,world,camera){
     const attackEntry=action.kind==='idle'?null:SCOUT_ATTACK_TIMING[action.kind];
     const sweep=action.phase==='strike'&&attackEntry
       ?cubicEaseOut((action.elapsed-attackEntry.windup)/attackEntry.strike):0;
-    const slash=action.kind==='slash'?(action.phase==='strike'?Math.sin(Math.PI*sweep):action.phase==='windup'?.25:0):0;
+    // The sword winds back, then travels forward across the strike window.
+    // The hit event is generated at the center of that same animation.
+    const slash=action.kind==='slash'
+      ?(action.phase==='windup'?-0.38:action.phase==='strike'?-0.38+1.38*sweep:
+         action.phase==='recover'?.18:0):0;
     const spinning=action.kind==='spin';
     // Visual spin is local to the pilot; neither camera yaw nor hook physics rotates.
     model.tilt.rotation.y=spinning?progress*Math.PI*8:0;
