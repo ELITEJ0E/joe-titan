@@ -128,6 +128,12 @@ function installVoxelPhysics(world,asset){
     return false;
   };
   world.anchors=[];
+  // Navigation-only rooftop footprints; movement uses the actual voxel grid.
+  // This preserves the tactical map without hundreds of physics box checks.
+  for(let x=5;x<nx-5;x+=8)for(let z=5;z<nz-5;z+=8){
+    const xx=x+ORIGIN.x+.5,zz=z+ORIGIN.z+.5,h=roof(xx,zz);
+    if(h>10&&h<80)world.colliders.push({x:xx,z:zz,h,halfW:3.8,halfD:3.8});
+  }
   for(let x=10;x<nx-10;x+=12)for(let z=10;z<nz-10;z+=12){
     const xx=x+ORIGIN.x+.5,zz=z+ORIGIN.z+.5,h=roof(xx,zz);
     if(h>6&&h<75)world.anchors.push(V(xx,h+1,zz));
