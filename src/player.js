@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 
@@ -166,7 +167,8 @@ export function createPlayer(scene,world,camera){
     if(state.grounded){
       const speedMultiplier=state.aspect?.speed||1;
       const goal=wish.clone().multiplyScalar((reeling?15:10.5)*speedMultiplier);const k=1-Math.exp(-dt*11);
-      state.velocity.x=mix(state.velocity.x,goal.x,k);state.velocity.z=mix(state.velocity.z,goal.z,k);
+      groundVelocityBlend(state.velocity,goal,dt,activeHooks>0);
+      if(activeHooks)state.velocity.addScaledVector(wish,dt*16*speedMultiplier);
       if(input.jumpQueued){state.velocity.y=12.6;state.grounded=false;}
       state.gas=clamp(state.gas+dt*15,0,100);
     }else{
@@ -204,14 +206,8 @@ export function createPlayer(scene,world,camera){
     state.velocity.y-=25*dt;
     if(state.velocity.length()>77*(state.aspect?.speed||1))state.velocity.multiplyScalar(77*(state.aspect?.speed||1)/state.velocity.length());
     state.position.addScaledVector(state.velocity,dt);
-    // Projection prevents rope stretching at high velocity or when reeling rapidly.
-    for(let pass=0;pass<3;pass++)for(const hook of state.hooks){
-      if(!hook)continue;
-      const away=state.position.clone().sub(hook.point),len=away.length();
-      if(len>hook.length){const normal=away.multiplyScalar(1/len);state.position.addScaledVector(normal,-(len-hook.length)*.94);
-        const outward=state.velocity.dot(normal);if(outward>0)state.velocity.addScaledVector(normal,-outward*.94);
-      }
-    }
+    // Symmetric dual-cable solve: preserve velocity along each cable tangent.
+    solveTetherConstraints(state.position,state.velocity,state.hooks);
     state.grounded=world.resolveCollision(state.position,prev,state.velocity);
     if(!ensureValid())return;
     state.speed=Math.hypot(state.velocity.x,state.velocity.y,state.velocity.z);
@@ -234,8 +230,9 @@ export function createPlayer(scene,world,camera){
     model.capeR.rotation.z=-Math.sin(time*6+.6)*.045;
     model.tilt.rotation.x=mix(model.tilt.rotation.x,state.grounded?0:clamp(state.velocity.y/110-.22,-.65,.38),1-Math.exp(-dt*5));
     const walk=state.grounded?Math.sin(time*flatSpeed*.92)*clamp(flatSpeed/9,0,1):.28;
-    model.legs[0].rotation.x=walk*.72+(state.grounded?0:-.39);
-    model.legs[1].rotation.x=-walk*.72+(state.grounded?0:-.39);
+    const aerialPose=!state.grounded?clamp(flatSpeed/45,0,1):0;
+    model.legs[0].rotation.x=walk*.72+(state.grounded?0:-.39-aerialPose*.12);
+    model.legs[1].rotation.x=-walk*.72+(state.grounded?0:-.39-aerialPose*.12);
     model.arms[0].rotation.x=state.hooks[0]?-.92:(state.grounded?-walk*.36:-.6);
     model.arms[1].rotation.x=state.hooks[1]?-.92:(state.grounded?walk*.36:-.6);
     for(let i=0;i<2;i++){
@@ -273,10 +270,11 @@ export function createPlayer(scene,world,camera){
     }
     desired.y=Math.max(.35,desired.y);
     if(snap||!finiteVector(camera.position))camera.position.copy(desired);
-    else camera.position.lerp(desired,1-Math.exp(-dt*8));
+    else camera.position.lerp(desired,1-Math.exp(-dt*(state.firstPerson?18:7.5)));
+    if(!state.firstPerson&&state.speed>18){const flightLift=clamp((state.speed-18)*.018,0,.65);camera.position.y+=flightLift*(1-Math.exp(-dt*4));}
     camera.position.y=Math.max(.35,camera.position.y);
     camera.lookAt(state.firstPerson?camera.position.clone().add(dir):aim.clone().addScaledVector(dir,9));
-    const targetFov=state.speed>23?73+clamp((state.speed-23)*.12,0,8):72;
+    const targetFov=state.speed>20?72+clamp((state.speed-20)*.16,0,10):72;
     camera.fov=mix(camera.fov,targetFov,1-Math.exp(-dt*3));camera.updateProjectionMatrix();
     model.root.visible=!state.firstPerson;
   }
