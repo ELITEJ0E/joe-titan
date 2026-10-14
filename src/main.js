@@ -63,6 +63,9 @@ async function init(){
   } catch(error) {
     console.info('[JOE TITAN] Optional Minecraft world unavailable; using procedural city:',error.message);
     world=createVoxelWorld(scene);
+    // Make the fallback visible instead of silently showing the wrong city.
+    const status=$('startMessage');
+    if(status)status.textContent='Shiganshina map not installed · Upload public/maps/shiganshina.jtvx to GitHub to activate it.';
   }
   player=createPlayer(scene,world,camera);
   enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
