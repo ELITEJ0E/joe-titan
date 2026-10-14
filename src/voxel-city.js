@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {resolveWorldCollision} from './collision.js';
 import {decorateReferenceLandmarks} from './voxel-landmarks.js';
+import {ATMOSPHERE_DEFAULTS,sampleCinematicAtmosphere,createSkyUniforms,updateSkyUniforms,CINEMATIC_SKY_VERTEX,CINEMATIC_SKY_FRAGMENT} from './cinematic-atmosphere.js';
 
 // A self-contained, low-draw-call voxel-inspired medieval city.
 // All building blocks sharing a material and 120m chunk become one InstancedMesh;
@@ -46,10 +47,16 @@ function pixelMaterial(color,seed,variation=27,kind=''){
   if(foliage)for(let i=0;i<92;i++){ctx.fillStyle=rng()<.5?'rgba(19,50,20,.18)':'rgba(220,227,116,.18)';ctx.fillRect(rng()*64,rng()*64,4,4);}
   const texture=new THREE.CanvasTexture(canvas);
   texture.magFilter=THREE.NearestFilter;
-  texture.minFilter=THREE.NearestMipmapNearestFilter;
+  texture.minFilter=THREE.NearestFilter;
+  texture.generateMipmaps=false;
   texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
   texture.colorSpace=THREE.SRGBColorSpace;
-  texture.anisotropy=2;
+  texture.anisotropy=1;
+  if(kind==='water')return new THREE.MeshPhysicalMaterial({
+    map:texture,color:0xbad9e7,roughness:.18,metalness:.04,
+    clearcoat:.85,clearcoatRoughness:.17,
+    transparent:true,opacity:.82,depthWrite:false,side:THREE.DoubleSide
+  });
   return new THREE.MeshLambertMaterial({map:texture,side:THREE.FrontSide});
 }
 function makePalette(){
@@ -67,23 +74,17 @@ function makePalette(){
   };
   return Object.fromEntries(Object.entries(p).map(([name,color],i)=>[name,pixelMaterial(color,3001+i*918,24+8*(i%3),name)]));
 }
-function addAtmosphere(scene){
-  // Vertex-based sky gradients / sunset haze; a single inexpensive draw call.
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(1000,24,16),new THREE.ShaderMaterial({
-    side:THREE.BackSide,depthWrite:false,fog:false,
-    vertexShader:`varying vec3 vDir;void main(){vDir=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
-    fragmentShader:`varying vec3 vDir;
-      void main(){
-        vec3 d=normalize(vDir);
-        float warm=clamp(0.55-d.y*1.55,0.0,1.0);
-        vec3 sky=mix(vec3(0.24,0.47,0.66),vec3(1.0,0.66,0.44),warm);
-        float glow=pow(max(dot(d,normalize(vec3(-0.7,0.37,-0.55))),0.0),17.0);
-        float sun=pow(max(dot(d,normalize(vec3(-0.7,0.37,-0.55))),0.0),320.0);
-        sky+=vec3(0.45,0.22,0.1)*glow+vec3(1.0,0.73,0.35)*sun*0.7;
-        gl_FragColor=vec4(sky,1.0);
-      }`
-  }));
-  sky.name='Voxel sunset sky';sky.frustumCulled=false;sky.renderOrder=-1000;scene.add(sky);
+function addAtmosphere(scene,sample){
+  const uniforms=createSkyUniforms(sample);
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(1000,24,16),
+    new THREE.ShaderMaterial({uniforms,vertexShader:CINEMATIC_SKY_VERTEX,
+      fragmentShader:CINEMATIC_SKY_FRAGMENT,side:THREE.BackSide,depthWrite:false,
+      depthTest:false,fog:false,toneMapped:true}));
+  sky.name='Voxel atmospheric sky';
+  sky.frustumCulled=false;sky.renderOrder=-1000;
+  sky.onBeforeRender=(_r,_s,camera)=>{sky.position.copy(camera.position);sky.updateMatrixWorld();};
+  scene.add(sky);
+  return {sky,uniforms};
 }
 export function createVoxelWorld(scene){
   const rng=random(406157),palette=makePalette();
@@ -92,13 +93,16 @@ export function createVoxelWorld(scene){
     landmarks:{cathedral:[0,-28],plaza:[42,30],citadel:[-98,-90],arena:[-92,38],market:[93,51],townHall:[91,5],harbour:[105,98],canalZ:117},
     spawnPoint:V(35,1,32),style:'voxel',elapsed:0
   };
-  scene.background=new THREE.Color(0xe6b18f);
-  scene.fog=new THREE.FogExp2(0xc6afa0,.00145);
-  addAtmosphere(scene);
-  scene.add(new THREE.HemisphereLight(0xffe8ce,0x5c675f,1.6));
+  const atmosphereValues={...ATMOSPHERE_DEFAULTS};
+  let atmosphere=sampleCinematicAtmosphere(atmosphereValues);
+  scene.background=atmosphere.horizon.clone();
+  scene.fog=new THREE.FogExp2(atmosphere.fog,.0011);
+  const skyLayer=addAtmosphere(scene,atmosphere);
+  const hemisphere=new THREE.HemisphereLight(0xffe8ce,0x5c675f,atmosphere.ambient);
+  scene.add(hemisphere);
   scene.add(new THREE.AmbientLight(0xffedd7,.22));
-  const sunlight=new THREE.DirectionalLight(0xffd0a0,2.6);
-  sunlight.position.set(-175,145,-125);
+  const sunlight=new THREE.DirectionalLight(atmosphere.sunColor,atmosphere.sunlight);
+  sunlight.position.copy(atmosphere.sunDirection).multiplyScalar(260);
   sunlight.castShadow=true;sunlight.shadow.mapSize.set(1024,1024);
   sunlight.shadow.camera.left=-194;sunlight.shadow.camera.right=194;
   sunlight.shadow.camera.top=194;sunlight.shadow.camera.bottom=-194;
@@ -367,6 +371,7 @@ export function createVoxelWorld(scene){
     if(!group.boxes.length)continue;
     const mesh=new THREE.InstancedMesh(unit,palette[group.kind],group.boxes.length);
     mesh.name='voxel-'+group.kind;mesh.castShadow=group.kind!=='water'&&group.kind!=='glass'&&group.kind!=='glow';
+    if(group.kind==='water')mesh.renderOrder=1;
     mesh.receiveShadow=true;
     group.boxes.forEach(([x,y,z,w,h,d],i)=>{
       dummy.position.set(x,y,z);dummy.scale.set(w,h,d);
@@ -425,7 +430,27 @@ export function createVoxelWorld(scene){
   world.setBeaconActive=(index)=>{
     world.beacons.forEach((b,i)=>{b.ring.material=i===index?active:inactive;b.group.scale.setScalar(i===index?1.07:.92);});
   };
+  let skyLastUpdate=-Infinity,skyDirty=true;
+  world.setAtmosphere=(updates={})=>{
+    for(const key of ['timeOfDay','weather','stormAmount','steamAmount']){
+      if(Object.hasOwn(updates,key))atmosphereValues[key]=updates[key];
+    }
+    skyDirty=true;
+  };
   world.animate=(time,dt)=>{
+    skyLayer.uniforms.uTime.value=time;
+    if(skyDirty||time-skyLastUpdate>=.25||time<skyLastUpdate){
+      skyDirty=false;skyLastUpdate=time;
+      atmosphere=sampleCinematicAtmosphere(atmosphereValues);
+      updateSkyUniforms(skyLayer.uniforms,atmosphere,time,fallbackCinematic?1.45:1);
+      sunlight.color.copy(atmosphere.sunColor);
+      sunlight.intensity=atmosphere.sunlight*(fallbackCinematic?1.08:1);
+      sunlight.position.copy(atmosphere.sunDirection).multiplyScalar(260);
+      hemisphere.color.copy(atmosphere.skyFill);hemisphere.intensity=atmosphere.ambient;
+      scene.background.copy(atmosphere.horizon);
+      scene.fog.color.copy(atmosphere.fog);
+      scene.fog.density=(menuClarity?.00042:(fallbackCinematic?.00175:.00135))*atmosphere.fogStrength;
+    }
     world.beacons.forEach((b,i)=>{
       b.ring.rotation.z=time*.32*(i%2?1:-1);
       b.group.position.y=b.point.y+Math.sin(time*2+i)*.36;
@@ -437,13 +462,13 @@ export function createVoxelWorld(scene){
   let fallbackCinematic=false,menuClarity=false;
   world.setMenuClarity=(value)=>{
     menuClarity=!!value;
-    scene.fog.density=menuClarity?.00042:(fallbackCinematic?.00175:.00135);
+    scene.fog.density=(menuClarity?.00042:(fallbackCinematic?.00175:.00135))*atmosphere.fogStrength;
   };
   world.setVisualQuality=(quality)=>{
     const cinematic=quality==='cinematic';
     fallbackCinematic=cinematic;
-    sunlight.intensity=cinematic?2.55:2.35;
-    scene.fog.density=menuClarity?.00042:(cinematic?.00175:.00135);
+    sunlight.intensity=atmosphere.sunlight*(cinematic?1.08:1);
+    scene.fog.density=(menuClarity?.00042:(cinematic?.00175:.00135))*atmosphere.fogStrength;
     sunlight.shadow.mapSize.set(cinematic?2048:1024,cinematic?2048:1024);
     if(sunlight.shadow.map)sunlight.shadow.map.dispose();
     sunlight.shadow.map=null;sunlight.shadow.needsUpdate=true;
