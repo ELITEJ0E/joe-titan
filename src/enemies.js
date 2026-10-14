@@ -69,6 +69,10 @@ export function createEnemySimulation(spawns=[]){
         e.state='stagger';e.attackPhase='idle';e.phaseTime=0;continue;
       }
       if(e.attackPhase!=='idle'){
+        // Telegraph follows the scout during windup; the actual lunge/strike
+        // then locks that orientation to make sidesteps meaningful.
+        if(e.attackPhase==='windup'&&distance>.1)
+          e.forward.lerp(offset.clone().normalize(),Math.min(1,dt*10)).normalize();
         e.phaseTime-=dt;
         if(e.attackPhase==='windup'&&e.phaseTime<=0){
           e.attackPhase='lunge';e.phaseTime=.17;
