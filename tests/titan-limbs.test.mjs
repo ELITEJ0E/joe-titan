@@ -1,0 +1,50 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import {severTitanArm,canTitanSwipe,titanSwipeDamage,LIMB_RULES} from '../src/titan-limbs.js';
+import {createEnemySimulation,createEnemyManager} from '../src/enemies.js';
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+test('REA limb rules instantly interrupt attacks and restore normal/boss arms at source-reported rates',()=>{
+ const e={alive:true,armLeft:0,armRight:0,attack:1.4,stagger:0,state:'strike'};
+ const result=severTitanArm(e,'left');
+ assert.equal(result.kind,'limb');
+ assert.equal(e.armLeft,LIMB_RULES.normalRegrow);
+ assert.equal(e.attack,0);
+ assert.equal(e.state,'stagger');
+ assert.equal(severTitanArm(e,'left').kind,'already-severed');
+ const boss={alive:true,armLeft:0,armRight:0,attack:3,stagger:0};
+ assert.equal(severTitanArm(boss,'right',{boss:true}).regrow,6);
+ assert.equal(boss.armRight,6);
+});
+test('a Titan loses its swipe if both arms are severed',()=>{
+ const e={alive:true,armLeft:12,armRight:12,stagger:0};
+ assert.equal(canTitanSwipe(e),false);
+ e.armRight=0;
+ assert.equal(canTitanSwipe(e),true);
+ assert.equal(titanSwipeDamage('runner'),18);
+ assert.equal(titanSwipeDamage('colossus'),35);
+});
+test('enemy simulation advances arm recovery timers',()=>{
+ const sim=createEnemySimulation([{type:'runner',position:[0,0,0]}]);
+ const e=sim.enemies[0];
+ severTitanArm(e,'left');severTitanArm(e,'right');
+ sim.update(6,V(100,0,100));
+ assert.equal(e.armLeft,6);
+ sim.update(6,V(100,0,100));
+ assert.equal(e.armLeft,0);
+});
+test('player-facing blade attack severs nearby target arm and hides it in the 3D rig',()=>{
+ const scene=new THREE.Scene();
+ const manager=createEnemyManager(scene,{grappleRay:()=>null});
+ const e=manager.enemies[0];
+ e.position.set(0,0,0);e.group.position.copy(e.position);
+ e.forward.set(0,0,-1);
+ const origin=V(-e.height*.15,e.height*.56,-5);
+ const result=manager.severArm(origin,V(0,0,1),8);
+ assert.equal(result.kind,'limb');
+ assert.equal(result.side,'left');
+ manager.update(.05,V(150,0,150),1);
+ assert.equal(e.group.children[2].visible,false);
+ manager.reset();
+ assert.equal(e.group.children[2].visible,true);
+});
