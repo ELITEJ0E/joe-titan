@@ -37,12 +37,15 @@ export function createEnemySimulation(spawns=[]){
   return {enemies,update,reset};
 }
 
-export function strikeWeakPoint(enemy,origin,direction,damage=18){
+export function strikeWeakPoint(enemy,origin,direction,damage=18,maxReach=Infinity){
   if(!enemy.alive)return {hit:false};
   // The exposed nape sits on the forward-marked side of this original creature rig.
   if(origin.clone().sub(enemy.position).dot(enemy.forward)<=.5)return {hit:false};
   const point=enemy.position.clone().addScaledVector(enemy.forward,1.45).add(V(0,enemy.height*.82,0));
-  const ray=point.clone().sub(origin),distance=ray.length();ray.multiplyScalar(1/(distance||1));
+  const ray=point.clone().sub(origin),distance=ray.length();
+  // Blades must actually pass near the nape; a line of sight is not a hit.
+  if(distance>maxReach)return {hit:false};
+  ray.multiplyScalar(1/(distance||1));
   const alignment=ray.dot(direction),closest=origin.clone().addScaledVector(direction,Math.max(0,point.clone().sub(origin).dot(direction)));
   if(alignment<.87||closest.distanceTo(point)>2.35)return {hit:false};
   enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.45;
@@ -81,7 +84,7 @@ export function createEnemyManager(scene,world){
   }
   function strike(origin,direction,damage=22){
     const candidates=simulation.enemies.filter(enemy=>enemy.alive).sort((a,b)=>a.position.distanceToSquared(origin)-b.position.distanceToSquared(origin));
-    for(const enemy of candidates){const result=strikeWeakPoint(enemy,origin,direction,damage);if(result.hit)return result;}
+    for(const enemy of candidates){const result=strikeWeakPoint(enemy,origin,direction,damage,9.5);if(result.hit)return result;}
     return {hit:false};
   }
   function pulse(position,range,damage){let hits=0;for(const enemy of simulation.enemies){if(enemy.alive&&enemy.position.distanceTo(position)<=range){enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.9;if(enemy.health===0)enemy.alive=false;hits++;}}return hits;}
