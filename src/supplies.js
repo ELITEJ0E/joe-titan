@@ -21,6 +21,7 @@ export function createSupplyDrops(scene,world){
    item.respawn=35; // Original game respawn delay unknown; game-specific choice.
    if(item.type==='gas')player.refillGas(REFERENCE_COMBAT.fuelGas);
    else if(item.type==='health')player.heal(REFERENCE_COMBAT.fuelHP);
+   else if(item.type==='blades')player.refillBlades?.(REFERENCE_COMBAT.fuelBlades);
    return item.type;
   }
   return null;
