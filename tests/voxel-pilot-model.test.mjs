@@ -27,7 +27,9 @@ test('camera increases field of view smoothly with sustained flight speed',()=>{
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(72,1,.1,1000);
   const world={spawnPoint:V(0,1,0),resolveCollision:()=>false,grappleRay:()=>null};
   const player=createPlayer(scene,world,camera);
-  player.velocity.set(38,5,-21);player.updateCamera(.1);
+  player.velocity.set(38,5,-21);
+  player.update(1/60,{keys:new Set(),jumpQueued:false},.1);
+  player.updateCamera(.1);
   assert.ok(camera.fov>72);
   assert.ok(camera.fov<110);
 });
