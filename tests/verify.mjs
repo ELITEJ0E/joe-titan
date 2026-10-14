@@ -7,6 +7,8 @@ const html=read('../index.html');
 const main=read('../src/main.js');
 const world=read('../src/voxel-city.js');
 const player=read('../src/player.js');
+const motor=read('../src/odm-motor.js');
+if(!motor.includes('hook.length'))throw Error('ODM motor must handle cable length');
 const ids=[...main.matchAll(/\$\('([a-zA-Z][\w-]*)'\)/g)].map(m=>m[1]);
 const missing=[...new Set(ids)].filter(id=>!html.includes(`id="${id}"`));
 if(missing.length)throw Error('Missing UI elements: '+missing.join(', '));
@@ -16,7 +18,7 @@ for(const file of ['../src/main.js','../src/voxel-city.js','../src/odm-physics.j
 for(const token of ['grappleRay','bestAnchor','resolveCollision','setBeaconActive']){
   if(!world.includes(token))throw Error(`Missing world API ${token}`);
 }
-for(const token of ['function fire','function release','function updateCamera','hook.length','state.boost']){
+for(const token of ['function fire','function release','function updateCamera','applyODMMotor','state.boost']){
   if(!player.includes(token))throw Error(`Missing movement feature ${token}`);
 }
 if(!main.includes('hookRetryClock-=.01'))throw Error('Held ODM grapple does not reacquire missed targets');
