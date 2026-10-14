@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {solveTetherConstraints,groundVelocityBlend} from './odm-physics.js';
 import {applyODMMotor,applyReferenceAirDrag,ODM_TUNING} from './odm-motor.js';
+import {impactDamage} from './odm-impacts.js';
 import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 
@@ -217,6 +218,15 @@ export function createPlayer(scene,world,camera){
     // Symmetric dual-cable solve: preserve velocity along each cable tangent.
     solveTetherConstraints(state.position,state.velocity,state.hooks);
     state.grounded=world.resolveCollision(state.position,prev,state.velocity);
+    if(world.style==='minecraft-world'&&world.lastCollision){
+      const impact=world.lastCollision;
+      const damage=impactDamage(impact.wallSpeed,true)+impactDamage(impact.landingSpeed,false);
+      if(damage>0){
+        const reduced=damage*(1-(state.aspect?.armor||0));
+        state.health=Math.max(0,state.health-reduced);
+        if(state.health===0){state.recoveries++;reset();return;}
+      }
+    }
     if(!ensureValid())return;
     state.speed=Math.hypot(state.velocity.x,state.velocity.y,state.velocity.z);
     state.attackTimer=Math.max(0,state.attackTimer-dt);
