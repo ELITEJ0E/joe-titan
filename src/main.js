@@ -325,7 +325,7 @@ function hudUpdate(){
   $('healthFill').style.width=`${player.health}%`;$('healthValue').textContent=`${Math.ceil(player.health)}%`;
   $('threatCount').textContent=String(enemies.living()).padStart(2,'0');
   navigation.update(courseIndex,practice,enemies.enemies,active);
-  if(debugVisible)$('diagnostics').textContent=`POSITION ${player.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nSPEED ${player.speed.toFixed(1)} m/s · ${player.grounded?'GROUNDED':'AIRBORNE'}\nCAMERA ${camera.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nRECOVERIES ${player.recoveries} · DRAW CALLS ${renderer.info.render.calls}`;
+  if(debugVisible)$('diagnostics').textContent=`POSITION ${player.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nSPEED ${player.speed.toFixed(1)} m/s · ${player.grounded?'GROUNDED':'AIRBORNE'}\nHOOKS ${player.hooks.map((h,i)=>h?`${i?'R':'L'} ${h.point.distanceTo(player.position).toFixed(1)}/${h.length.toFixed(1)}m`:`${i?'R':'L'} OFF`).join(' · ')}\nCAMERA ${camera.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nRECOVERIES ${player.recoveries} · DRAW CALLS ${renderer.info.render.calls}`;
 }
 let prevTime=0,accumulator=0,physicsTick=0;
 function loop(ms){
