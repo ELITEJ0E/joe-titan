@@ -407,6 +407,7 @@ function loop(ms){
     camera.lookAt(0,9,-4);
   }
   world.animate(gameTime,dt);
+  multiplayer?.render(dt);
   if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
   if(graphics)graphics.render();else renderer.render(scene,camera);
 }
