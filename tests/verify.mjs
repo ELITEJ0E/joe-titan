@@ -19,6 +19,9 @@ for(const token of ['grappleRay','bestAnchor','resolveCollision','setBeaconActiv
 for(const token of ['function fire','function release','function updateCamera','hook.length','state.boost']){
   if(!player.includes(token))throw Error(`Missing movement feature ${token}`);
 }
+if(!main.includes('hookRetryClock-=.01'))throw Error('Held ODM grapple does not reacquire missed targets');
+if(!main.includes('releaseUnheld'))throw Error('Independent keyboard/mouse grapple release unavailable');
+if(!main.includes('physicsTick%5===0'))throw Error('Network tick-rate separation missing');
 if(!main.includes('world=createVoxelWorld(scene)'))throw Error('Voxel city is not the active world');
 if(main.includes('installMedievalCity('))throw Error('Heavy GLB loader is still active');
 if(!world.includes('InstancedMesh'))throw Error('Voxel city must batch repeated blocks');
