@@ -252,7 +252,7 @@ export function createVoxelWorld(scene){
     const alongX=w>d;
     for(let t=-(alongX?w:d)/2+2;t<(alongX?w:d)/2;t+=5){
       const cx=x+(alongX?t:0),cz=z+(alongX?0:t);
-      block('limestone',cx,h+1.55,cz,alongX?2.8:d,3.1,alongX?d:2.8);
+      block('limestone',cx,h+1.55,cz,alongX?2.8:w,3.1,alongX?d:2.8);
       world.anchors.push(V(cx,h+3.2,cz));
     }
   }
