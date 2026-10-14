@@ -7,6 +7,7 @@ import {chooseGrappleTarget} from './odm-targeting.js';
 import {pilotPoseTargets} from './odm-pose.js';
 import {ODM_CABLE_SEGMENTS,writeODMCableCurve} from './odm-cable-visuals.js';
 import {aimODMArm} from './odm-arm-aim.js';
+import {updateStableFirstPersonCamera} from './odm-first-person-camera.js';
 import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
@@ -402,36 +403,62 @@ export function createPlayer(scene,world,camera){
   }
   function updateCamera(dt,snap=false){
     ensureValid();
-    const aim=state.position.clone().add(V(0,.9,0)),dir=viewDirection();
-    const shoulder=V(Math.cos(state.yaw)*1.15,.0,-Math.sin(state.yaw)*1.15);
-    const desired=state.firstPerson?state.position.clone().add(V(0,1.3,0)):
-      aim.clone().addScaledVector(dir,-11.6).add(V(0,2.15,0)).add(shoulder);
+    const dir=viewDirection();
+
+    if(state.firstPerson){
+      // First person has a single eye pivot and an exact, world-up view ray.
+      // Position/aim are NOT independently interpolated while grappling.
+      updateStableFirstPersonCamera(camera,state.position,dir,dt,{
+        snap,speed:state.speed,boosting:state.boost
+      });
+      // Keep third-person look smoothing initialized for a clean view toggle.
+      cameraAim.copy(camera.position).add(dir);
+      model.root.visible=false;
+      return;
+    }
+
+    const aim=state.position.clone().add(V(0,.9,0));
+    const shoulder=V(Math.cos(state.yaw)*1.15,0,-Math.sin(state.yaw)*1.15);
+    const desired=aim.clone().addScaledVector(dir,-11.6).add(V(0,2.15,0)).add(shoulder);
     let obstructed=false;
-    if(!state.firstPerson){
-      const delta=desired.clone().sub(aim),dist=delta.length();let hit=world.grappleRay(aim,delta.clone().normalize(),dist);
-      if(hit&&hit.distanceTo(aim)<dist){const closer=Math.max(.35,hit.distanceTo(aim)-.65);desired.copy(aim).addScaledVector(delta.normalize(),closer);obstructed=true;}
+    const delta=desired.clone().sub(aim),dist=delta.length();
+    const hit=world.grappleRay(aim,delta.clone().normalize(),dist);
+    if(hit&&hit.distanceTo(aim)<dist){
+      const closer=Math.max(.35,hit.distanceTo(aim)-.65);
+      desired.copy(aim).addScaledVector(delta.normalize(),closer);
+      obstructed=true;
     }
     desired.y=Math.max(.35,desired.y);
     if(snap||!finiteVector(camera.position))camera.position.copy(desired);
-    else camera.position.lerp(desired,1-Math.exp(-dt*(obstructed?19:state.firstPerson?18:7.5)));
-    if(!state.firstPerson&&state.speed>18){const flightLift=clamp((state.speed-18)*.018,0,.65);camera.position.y+=flightLift*(1-Math.exp(-dt*4));}
-    camera.position.y=Math.max(.35,camera.position.y);
-    const lookPoint=state.firstPerson?camera.position.clone().add(dir):aim.clone().addScaledVector(dir,6.5);
-    cameraAim.lerp(lookPoint,snap?1:1-Math.exp(-dt*(state.firstPerson?19:11)));
-    camera.lookAt(cameraAim);
-    // Light roll echoes the pilot's sideways banking without disorienting
-    // the player or moving the actual aim ray off the crosshair.
-    if(!state.firstPerson){
-      const trauma=state.impactFeedback*state.impactFeedback;
-      const shake=Math.sin(state.flightClock*83)*trauma*.024;
-      camera.rotateZ(clamp(state.bank*.095+shake,-.07,.07));
+    else camera.position.lerp(desired,1-Math.exp(-dt*(obstructed?19:7.5)));
+    if(state.speed>18){
+      const flightLift=clamp((state.speed-18)*.018,0,.65);
+      camera.position.y+=flightLift*(1-Math.exp(-dt*4));
     }
+    camera.position.y=Math.max(.35,camera.position.y);
+    const lookPoint=aim.clone().addScaledVector(dir,6.5);
+    cameraAim.lerp(lookPoint,snap?1:1-Math.exp(-dt*11));
+    camera.up.set(0,1,0);
+    camera.lookAt(cameraAim);
+
+    // Third-person cinematic roll remains separate from precise FPS targeting.
+    const trauma=state.impactFeedback*state.impactFeedback;
+    const shake=Math.sin(state.flightClock*83)*trauma*.024;
+    camera.rotateZ(clamp(state.bank*.095+shake,-.07,.07));
+
     const movementFov=clamp((state.speed-9)*.42,0,25);
     const targetFov=72+movementFov+(state.boost?5:0)+(state.hooks.some(Boolean)&&state.speed>15?2:0);
     const nextFov=mix(camera.fov,targetFov,1-Math.exp(-dt*5));
-    if(Math.abs(nextFov-camera.fov)>.002){camera.fov=nextFov;camera.updateProjectionMatrix();}
-    model.root.visible=!state.firstPerson;
+    if(Math.abs(nextFov-camera.fov)>.002){
+      camera.fov=nextFov;camera.updateProjectionMatrix();
+    }
+    model.root.visible=true;
   }
   reset();
-  return {...state,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,spin,consumeAttackHit,viewDirection,get combat(){return state.combat;},get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){state.firstPerson=v;}};
+  return {...state,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,spin,consumeAttackHit,viewDirection,get combat(){return state.combat;},get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){
+    const next=!!v;
+    if(state.firstPerson===next)return;
+    state.firstPerson=next;
+    updateCamera(1,true);
+  }};
 }
