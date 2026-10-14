@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {napeHit,segmentNapeHealth} from './reference-combat.js';
 import {createTitanProjectiles,BOULDER} from './titan-projectiles.js';
 import {severTitanArm,canTitanSwipe,titanSwipeDamage} from './titan-limbs.js';
+import {createVoxelTitanRig,animateVoxelTitanRig} from './titan-voxel-rig.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
@@ -18,28 +19,93 @@ export function createEnemySimulation(spawns=[]){
   const enemies=spawns.map((spawn,index)=>{
     const type=TYPES[spawn.type]||TYPES.wanderer,position=V(...spawn.position);
     return {id:spawn.id||`riftborn-${index}`,type:spawn.type||'wanderer',height:type.height,maxHealth:type.health,health:type.health,
-      speed:type.speed,shifter:!!type.shifter,napeHP:segmentNapeHealth(type.health),armRight:0,armLeft:0,position,spawnPosition:position.clone(),patrol:V(...(spawn.patrol||spawn.position)),spawnPatrol:V(...(spawn.patrol||spawn.position)),forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0};
+      speed:type.speed,shifter:!!type.shifter,napeHP:segmentNapeHealth(type.health),armRight:0,armLeft:0,
+      position,spawnPosition:position.clone(),patrol:V(...(spawn.patrol||spawn.position)),
+      forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0,
+      attackPhase:'idle',phaseTime:0,patrolGoal:1,loiter:0,moving:0,flash:0};
   });
-  function reset(){for(const enemy of enemies){enemy.position.copy(enemy.spawnPosition);enemy.patrol.copy(enemy.spawnPatrol);enemy.health=enemy.maxHealth;enemy.napeHP=segmentNapeHealth(enemy.maxHealth);enemy.armRight=enemy.armLeft=0;enemy.alive=true;enemy.state='patrol';enemy.attack=0;enemy.stagger=0;enemy.forward.set(0,0,-1);}}
+  function reset(){
+    for(const e of enemies){
+      e.position.copy(e.spawnPosition);e.health=e.maxHealth;e.napeHP=segmentNapeHealth(e.maxHealth);
+      e.armRight=e.armLeft=0;e.alive=true;e.state='patrol';e.attack=0;e.stagger=0;
+      e.attackPhase='idle';e.phaseTime=0;e.patrolGoal=1;e.loiter=0;e.moving=0;e.flash=0;
+      e.forward.set(0,0,-1);
+    }
+  }
   function update(dt,playerPosition,decoyPosition=null,slow=1){
     let damage=0,grab=false;
-    for(const enemy of enemies){
-      if(!enemy.alive)continue;
-      enemy.attack=Math.max(0,enemy.attack-dt);enemy.stagger=Math.max(0,enemy.stagger-dt);enemy.armRight=Math.max(0,enemy.armRight-dt);enemy.armLeft=Math.max(0,enemy.armLeft-dt);
-      const target=decoyPosition||playerPosition,offset=target.clone().sub(enemy.position);offset.y=0;const distance=offset.length();
-      if(enemy.stagger>0){enemy.state='stagger';continue;}
-      if(distance<42)enemy.state='pursue';else if(enemy.state!=='patrol')enemy.state='return';
-      const destination=enemy.state==='pursue'?target:enemy.patrol;
-      const direction=destination.clone().sub(enemy.position);direction.y=0;
-      const targetDistance=direction.length();
-      if(targetDistance>.5){direction.multiplyScalar(1/targetDistance);enemy.forward.lerp(direction,Math.min(1,dt*4)).normalize();}
-      if(enemy.state==='pursue'&&distance<7&&canTitanSwipe(enemy)){
-        enemy.state='strike';if(enemy.attack===0){
-          if(enemy.type==='armored'&&distance<4.8){enemy.attack=8;grab=true;}
-          else{enemy.attack=2.4;damage=titanSwipeDamage(enemy.type);}
+    if(!Number.isFinite(dt)||dt<=0)return {damage,grab};
+    for(const e of enemies){
+      if(!e.alive)continue;
+      e.attack=Math.max(0,e.attack-dt);e.stagger=Math.max(0,e.stagger-dt);
+      e.armRight=Math.max(0,e.armRight-dt);e.armLeft=Math.max(0,e.armLeft-dt);
+      const target=decoyPosition||playerPosition;
+      const offset=target.clone().sub(e.position);offset.y=0;
+      const distance=offset.length();
+      e.moving=0;
+      if(e.stagger>0){
+        e.state='stagger';e.attackPhase='idle';e.phaseTime=0;continue;
+      }
+      if(e.attackPhase!=='idle'){
+        e.phaseTime-=dt;
+        if(e.attackPhase==='windup'&&e.phaseTime<=0){
+          e.attackPhase='lunge';e.phaseTime=.17;
+        }else if(e.attackPhase==='lunge'){
+          const advance=Math.min(distance,e.speed*1.6*dt);
+          if(distance>2.7&&distance<11&&offset.lengthSq()>1e-8){
+            e.position.addScaledVector(offset.normalize(),advance);e.moving=.5;
+          }
+          if(e.phaseTime<=0){
+            e.attackPhase='strike';e.phaseTime=.15;
+            e.attack=e.type==='armored'?8:2.4;
+            if(distance<8.2&&canTitanSwipe(e)){
+              if(e.type==='armored'&&distance<4.8)grab=true;
+              else damage+=titanSwipeDamage(e.type);
+            }
+          }
+        }else if(e.attackPhase==='strike'&&e.phaseTime<=0){
+          e.attackPhase='recover';e.phaseTime=.44;
+        }else if(e.attackPhase==='recover'&&e.phaseTime<=0){
+          e.attackPhase='idle';e.phaseTime=0;
         }
-      }else if(targetDistance>.7){enemy.position.addScaledVector(enemy.forward,Math.min(targetDistance,enemy.speed*slow*dt));}
-      enemy.position.x=clamp(enemy.position.x,-181,181);enemy.position.z=clamp(enemy.position.z,-181,181);
+        e.state=e.attackPhase==='idle'?'pursue':e.attackPhase;
+        continue;
+      }
+      const pursuing=distance<42;
+      let destination;
+      if(pursuing){
+        e.state='pursue';destination=target;
+      }else{
+        // Patrol continuously between the spawn and assigned waypoint, with
+        // a short idle scan at each end. Enemies do not freeze at their patrol.
+        destination=e.patrolGoal?e.patrol:e.spawnPosition;
+        const waypointDist=Math.hypot(destination.x-e.position.x,destination.z-e.position.z);
+        if(waypointDist<1){
+          if(e.loiter<=0)e.loiter=1.0+(e.height%5)*.17;
+          e.loiter-=dt;
+          if(e.loiter<=0){e.patrolGoal=1-e.patrolGoal;e.loiter=0;}
+          e.state='patrol';continue;
+        }
+        e.state='patrol';
+      }
+      const direction=destination.clone().sub(e.position);direction.y=0;
+      const remaining=direction.length();
+      if(remaining>1e-6){
+        direction.multiplyScalar(1/remaining);
+        e.forward.lerp(direction,Math.min(1,dt*(pursuing?4.5:2.5))).normalize();
+      }
+      if(pursuing&&distance<7&&e.attack===0&&canTitanSwipe(e)){
+        e.attackPhase='windup';e.phaseTime=e.type==='runner'?.28:.48;
+        e.state='windup';continue;
+      }
+      const stop=pursuing?3.5:.7;
+      if(remaining>stop){
+        const travel=Math.min(remaining-stop,e.speed*slow*dt);
+        e.position.addScaledVector(e.forward,travel);
+        e.moving=clamp(travel/Math.max(.0001,e.speed*dt),0,1);
+      }
+      e.position.x=clamp(e.position.x,-181,181);
+      e.position.z=clamp(e.position.z,-181,181);
     }
     return {damage,grab};
   }
@@ -48,15 +114,16 @@ export function createEnemySimulation(spawns=[]){
 
 export function strikeWeakPoint(enemy,origin,direction,damage=18,maxReach=Infinity){
   if(!enemy.alive)return {hit:false};
-  // The exposed nape sits on the forward-marked side of this original creature rig.
-  if(origin.clone().sub(enemy.position).dot(enemy.forward)<=.5)return {hit:false};
-  const point=enemy.position.clone().addScaledVector(enemy.forward,1.45).add(V(0,enemy.height*.82,0));
+  // The nape is at the BACK of the skull, opposite the facing direction.
+  if(origin.clone().sub(enemy.position).dot(enemy.forward)>=-.5)return {hit:false};
+  const point=enemy.position.clone().addScaledVector(enemy.forward,-enemy.height*.18).add(V(0,enemy.height*.82,0));
   const ray=point.clone().sub(origin),distance=ray.length();
   // Blades must actually pass near the nape; a line of sight is not a hit.
   if(distance>maxReach)return {hit:false};
   ray.multiplyScalar(1/(distance||1));
   const alignment=ray.dot(direction),closest=origin.clone().addScaledVector(direction,Math.max(0,point.clone().sub(origin).dot(direction)));
   if(alignment<.87||closest.distanceTo(point)>2.35)return {hit:false};
+  enemy.flash=1;
   if(enemy.shifter){
     const result=napeHit({hp:enemy.health,napeHP:enemy.napeHP,shifter:true,deep:damage>=35,
       armor:enemy.type==='armored'&&enemy.stagger===0&&damage<44});
@@ -70,26 +137,30 @@ export function strikeWeakPoint(enemy,origin,direction,damage=18,maxReach=Infini
   return {hit:true,point,defeated:!enemy.alive,enemy};
 }
 
-function humanoid(scene,enemy){
-  const type=TYPES[enemy.type]||TYPES.wanderer,group=new THREE.Group(),skin=new THREE.MeshStandardMaterial({color:type.color,roughness:.82}),dark=new THREE.MeshStandardMaterial({color:0x3e3030,roughness:.9});
-  const body=new THREE.Mesh(new THREE.CapsuleGeometry(type.height*.105,type.height*.45,5,8),skin);body.position.y=type.height*.48;body.castShadow=true;group.add(body);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(type.height*.13,12,9),skin);head.position.y=type.height*.83;head.castShadow=true;group.add(head);
-  for(const side of [-1,1]){const arm=new THREE.Mesh(new THREE.CapsuleGeometry(type.height*.048,type.height*.34,4,6),skin);arm.position.set(side*type.height*.15,type.height*.56,0);arm.rotation.z=side*.18;arm.castShadow=true;group.add(arm);}
-  const weak=new THREE.Mesh(new THREE.SphereGeometry(type.height*.06,10,8),new THREE.MeshBasicMaterial({color:0xffd99a,transparent:true,opacity:.96}));weak.position.set(0,type.height*.82,type.height*.14);group.add(weak);
-  const shadow=new THREE.Mesh(new THREE.CircleGeometry(type.height*.3,16),new THREE.MeshBasicMaterial({color:0x11131a,transparent:true,opacity:.28,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.03;group.add(shadow);
-  group.position.copy(enemy.position);scene.add(group);enemy.group=group;enemy.weak=weak;return enemy;
-}
-
 export function createEnemyManager(scene,world){
   const simulation=createEnemySimulation([
     {type:'wanderer',position:[-72,0,-67],patrol:[-105,0,-91]}, {type:'runner',position:[75,0,-92],patrol:[110,0,-106]},
     {type:'bruiser',position:[-117,0,75],patrol:[-132,0,110]}, {type:'wanderer',position:[98,0,83],patrol:[127,0,116]},
     {type:'beast',position:[-58,0,112],patrol:[-94,0,128]}, {type:'armored',position:[135,0,8],patrol:[153,0,29]}
   ]);
-  simulation.enemies.forEach(enemy=>humanoid(scene,enemy));
+  simulation.enemies.forEach(enemy=>{
+    const type=TYPES[enemy.type]||TYPES.wanderer;
+    enemy.rig=createVoxelTitanRig(scene,enemy,type);
+    enemy.group=enemy.rig.group;enemy.weak=enemy.rig.weak;
+  });
   const boulders=createTitanProjectiles(scene,world);
   const throwTimers=new Map();let slowTimer=0,decoyTimer=0,decoy=null;
-  function reset(){simulation.reset();boulders.reset();throwTimers.clear();slowTimer=0;decoyTimer=0;decoy=null;for(const enemy of simulation.enemies){if(enemy.group){enemy.group.visible=true;enemy.group.position.copy(enemy.position);if(enemy.group.children[2])enemy.group.children[2].visible=true;if(enemy.group.children[3])enemy.group.children[3].visible=true;}}}
+  function reset(){
+    simulation.reset();boulders.reset();throwTimers.clear();
+    slowTimer=0;decoyTimer=0;decoy=null;
+    for(const enemy of simulation.enemies){
+      const rig=enemy.rig;
+      rig.group.visible=true;rig.group.position.copy(enemy.position);rig.group.rotation.set(0,0,0);
+      rig.hips.quaternion.identity();rig.flash=0;rig.death=0;rig.gait=0;
+      rig.weak.visible=true;rig.alert.visible=false;
+      for(const side of ['left','right'])rig.arms[side].shoulder.visible=true;
+    }
+  }
   function update(dt,playerPosition,time){
     slowTimer=Math.max(0,slowTimer-dt);decoyTimer=Math.max(0,decoyTimer-dt);
     const result=simulation.update(dt,playerPosition,decoyTimer>0?decoy:null,slowTimer>0?.48:1);
@@ -104,12 +175,18 @@ export function createEnemyManager(scene,world){
           throwTimers.set(enemy.id,BOULDER.cooldown);
         }else throwTimers.set(enemy.id,timer);
       }
-      if(!enemy.group)continue;enemy.group.visible=enemy.alive;enemy.group.position.copy(enemy.position);enemy.group.rotation.y=Math.atan2(enemy.forward.x,enemy.forward.z);
-      // Hide severed procedural arms until their individual regrowth timers expire.
-      if(enemy.group.children[2])enemy.group.children[2].visible=enemy.armLeft<=0;
-      if(enemy.group.children[3])enemy.group.children[3].visible=enemy.armRight<=0;
-      const stride=Math.sin(time*(enemy.speed*2)+enemy.position.x)*.09;enemy.group.children[0].rotation.z=stride;
-      if(enemy.weak)enemy.weak.scale.setScalar(enemy.state==='stagger'?1.65:1+Math.sin(time*4)*.16);
+      if(!enemy.rig)continue;
+      // The rig faces local -Z; world.forward is the target-facing vector.
+      enemy.rig.group.rotation.y=Math.atan2(-enemy.forward.x,-enemy.forward.z);
+      // Keep voxel Titans above the Minecraft heightfield rather than y=0,
+      // while retaining the old flat-ground positions in procedural mode.
+      if(typeof world.terrainHeight==='function'){
+        const ground=world.terrainHeight(enemy.position.x,enemy.position.z);
+        if(Number.isFinite(ground))enemy.position.y=ground;
+      }
+      enemy.rig.group.position.copy(enemy.position);
+      if(enemy.flash>0){enemy.rig.flash=Math.max(enemy.rig.flash,enemy.flash);enemy.flash=0;}
+      animateVoxelTitanRig(enemy.rig,enemy,dt,time);
     }
     return result;
   }
@@ -127,8 +204,8 @@ export function createEnemyManager(scene,world){
       for(const side of ['left','right']){
         const sign=side==='left'?-1:1;
         const point=enemy.position.clone()
-          .addScaledVector(lateral,sign*enemy.height*.15)
-          .add(V(0,enemy.height*.56,0));
+          .addScaledVector(lateral,sign*enemy.height*.182)
+          .add(V(0,enemy.height*.79,0));
         const offset=point.clone().sub(origin),along=offset.dot(direction);
         if(along<0||along>maxReach)continue;
         const closest=origin.clone().addScaledVector(direction,along);
