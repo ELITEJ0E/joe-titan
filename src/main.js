@@ -324,7 +324,7 @@ function hudUpdate(){
   navigation.update(courseIndex,practice,enemies.enemies,active);
   if(debugVisible)$('diagnostics').textContent=`POSITION ${player.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nSPEED ${player.speed.toFixed(1)} m/s · ${player.grounded?'GROUNDED':'AIRBORNE'}\nCAMERA ${camera.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nRECOVERIES ${player.recoveries} · DRAW CALLS ${renderer.info.render.calls}`;
 }
-let prevTime=0,accumulator=0;
+let prevTime=0,accumulator=0,physicsTick=0;
 function loop(ms){
   requestAnimationFrame(loop);
   const seconds=ms*.001,dt=Math.min(prevTime?seconds-prevTime:.016,.06);prevTime=seconds;
@@ -345,9 +345,12 @@ function loop(ms){
         hookRetryClock=.10;
       }
       player.update(1/100,input,gameTime);
-      multiplayer?.update(player,gameTime);
+      physicsTick++;
+      // Physics stays fixed at 100 Hz; network snapshots need only 20 Hz.
+      if(physicsTick%5===0)multiplayer?.update(player,gameTime);
       const aspectUpdate=updateAspect(aspectState,1/100);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
-      const danger=enemies.update(1/100,player.position,gameTime);if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
+      // AI + enemy pose updates at 50 Hz save CPU on dense voxel worlds.
+      const danger=physicsTick%2===0?enemies.update(.02,player.position,gameTime):{damage:0};if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
       if(!finished)updateMission(1/100);
       updateChallenge(1/100);
       accumulator-=1/100;steps++;
