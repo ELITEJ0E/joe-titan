@@ -36,5 +36,5 @@ export function cornerOcclusion(asset,vertex,side,corner){
    py+(t1[1]*a*s1+t2[1]*b*s2)*.32,
    pz+(t1[2]*a*s1+t2[2]*b*s2)*.32));
  const first=sample(1,0),second=sample(0,1),diagonal=sample(1,1);
- return first&&second?.52:1-(Number(first)+Number(second)+Number(diagonal))*.115;
+ return first&&second ? .52 : 1-(Number(first)+Number(second)+Number(diagonal))*.115;
 }
