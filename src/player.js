@@ -36,7 +36,7 @@ function capePanel(parent,side){
   const g=new THREE.ShapeGeometry(shape,12);const m=green.clone();m.side=THREE.DoubleSide;
   const o=new THREE.Mesh(g,m);o.rotation.x=-.19;o.position.set(0,1.08,.40);o.castShadow=true;parent.add(o);return o;
 }
-function avatar(scene){
+function avatar(scene,{remote=false}={}){
   const root=new THREE.Group();scene.add(root);
   const tilt=new THREE.Group();root.add(tilt);
   // Cropped tan jacket over a pale undershirt, fitted military trousers.
@@ -118,10 +118,10 @@ function avatar(scene){
     box(knee,.39,.06,.40,0,-.35,0,leather);
     box(knee,.10,.085,.05,sign*.18,-.24,-.20,brass);
   }
-  const shadow=new THREE.Mesh(new THREE.CircleGeometry(.85,20),new THREE.MeshBasicMaterial({color:0x111b23,transparent:true,opacity:.22,depthWrite:false}));
-  shadow.rotation.x=-Math.PI/2;scene.add(shadow);
+  const shadow=remote?null:new THREE.Mesh(new THREE.CircleGeometry(.85,20),new THREE.MeshBasicMaterial({color:0x111b23,transparent:true,opacity:.22,depthWrite:false}));
+  if(shadow){shadow.rotation.x=-Math.PI/2;scene.add(shadow);}
   const ropeLines=[],tips=[];
-  for(const s of [-1,1]){
+  if(!remote)for(const s of [-1,1]){
     const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array((ODM_CABLE_SEGMENTS+1)*3),3));
     const line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:s<0?0xc6d9df:0xbfcad1,transparent:true,opacity:.96}));
     line.visible=false;line.frustumCulled=false;scene.add(line);ropeLines.push(line);
@@ -135,7 +135,7 @@ function avatar(scene){
   }
   // Two cheap camera-readable airflow streaks, only active in fast flight.
   const windTrails=[];
-  for(const side of [-1,1]){
+  if(!remote)for(const side of [-1,1]){
     const geometry=new THREE.BufferGeometry();
     geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
     const line=new THREE.Line(geometry,new THREE.LineBasicMaterial({
@@ -144,6 +144,11 @@ function avatar(scene){
     line.visible=false;line.frustumCulled=false;scene.add(line);windTrails.push(line);
   }
   return {root,tilt,headRig,arms,elbows,legs,knees,blades,capeL,capeR,shadow,ropeLines,tips,jets,windTrails};
+}
+// Multiplayer draws the exact same detailed scout silhouette as local pilots,
+// without allocating unused local grapple ropes, hit tips or airflow geometry.
+export function createScoutAvatarModel(scene,{remote=false}={}){
+  return avatar(scene,{remote});
 }
 export function createPlayer(scene,world,camera){
   const model=avatar(scene);
