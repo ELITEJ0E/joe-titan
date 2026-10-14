@@ -276,7 +276,7 @@ function attachEvents(){
     if(!started||paused||finished)return;
     if(document.pointerLockElement!==canvas&&document.activeElement!==canvas)return;
     if(player.grabbed&&(event.code==='KeyF'||event.code==='Space')){
-      if(!event.repeat){const escape=player.escapeGrab();showToast(escape.active?'ESCAPE THE GRAB · '+escape.remaining+' INPUTS':'GRAB BROKEN · KEEP MOVING');}
+      if(!event.repeat){const escape=player.escapeGrab(event.code,gameTime);showToast(escape.active?'ESCAPE THE GRAB · '+escape.remaining+' INPUTS':'GRAB BROKEN · KEEP MOVING');}
       return;
     }
     if(!input.keys.has(event.code)){
