@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JTVX Inspector</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#10151b;color:#e7edf2;font:14px system-ui,sans-serif}
+    #hud{position:fixed;z-index:2;top:12px;left:12px;min-width:260px;padding:12px 14px;border:1px solid #ffffff22;border-radius:10px;background:#10151bcc;backdrop-filter:blur(8px);line-height:1.55}
+    #hud strong{color:#ffd17c} #hud .muted{color:#9caab4}
+    button{margin:3px 3px 0 0;padding:5px 8px;border:1px solid #ffffff30;border-radius:6px;background:#26333d;color:#fff;cursor:pointer}
+    button:hover{background:#354752} label{display:block;margin-top:7px}.row{display:flex;gap:8px;align-items:center}
+    #error{color:#ff968d;max-width:360px} canvas{display:block}
+  </style>
+</head>
+<body>
+  <div id="hud"><strong>JTVX Inspector</strong><div id="status">Loading map…</div><div id="stats" class="muted"></div>
+    <div class="row"><button id="wire">Wireframe</button><button id="anchors">Anchors</button><button id="grid">Grid</button><button id="reset">Reset view</button></div>
+    <label>Visual quality <input id="quality" type="range" min="0" max="1" step="1" value="1"></label>
+    <div class="muted">Drag orbit · wheel zoom · right-drag pan</div><div id="error"></div>
+  </div>
+  <script type="module" src="/src/jtvx-inspector.js"></script>
+</body>
+</html>
