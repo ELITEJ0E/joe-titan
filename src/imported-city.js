@@ -37,7 +37,11 @@ export async function installMedievalCity(scene,world,oldObjects,{onReady=()=>{}
     city.position.set(-meta.centerXZ[0]*meta.scale,0,-meta.centerXZ[1]*meta.scale);
     city.updateMatrixWorld(true);
     let meshCount=0;
-    city.traverse(obj=>{if(obj.isMesh){meshCount++;obj.receiveShadow=true;obj.castShadow=false;obj.frustumCulled=true;}});
+    const raycastables=[];
+    city.traverse(obj=>{if(obj.isMesh){
+      meshCount++;obj.receiveShadow=true;obj.castShadow=false;obj.frustumCulled=true;
+      if(obj.geometry?.attributes?.position)raycastables.push(obj);
+    }});
     if(!meshCount)throw Error('GLB contains no meshes');
     const anchors=[];
     for(let iz=4;iz<meta.size-4;iz+=3)for(let ix=4;ix<meta.size-4;ix+=3){
@@ -46,14 +50,24 @@ export async function installMedievalCity(scene,world,oldObjects,{onReady=()=>{}
     }
     if(anchors.length<10)throw Error('Insufficient city grapple anchors');
     const spawn=chooseSpawn(height);
+    // Accurate surface raycasts on the GLB, with cheap world-space bounding-box
+    // rejection before asking Three.js to test mesh triangles. Build once.
+    const spatialMeshes=raycastables.map(mesh=>({mesh,box:new THREE.Box3().setFromObject(mesh)}));
+    const raycaster=new THREE.Raycaster();
+    const boxRay=new THREE.Ray();
     const grappleRay=(origin,direction,maxDist=125)=>{
-      const dir=direction.clone().normalize(),p=new THREE.Vector3();
-      for(let d=.8;d<=maxDist;d+=1){
-        p.copy(origin).addScaledVector(dir,d);
-        const h=height(p.x,p.z);
-        if(h>2.3&&p.y>.75&&p.y<=h+.25)return V(p.x,Math.min(p.y,h),p.z);
+      const dir=direction.clone().normalize();
+      raycaster.set(origin,dir);raycaster.near=0.2;raycaster.far=maxDist;
+      boxRay.set(origin,dir);
+      let closest=null,nearest=maxDist;
+      for(const candidate of spatialMeshes){
+        if(!boxRay.intersectsBox(candidate.box))continue;
+        const intersections=raycaster.intersectObject(candidate.mesh,false);
+        if(intersections.length&&intersections[0].distance<nearest){
+          nearest=intersections[0].distance;closest=intersections[0].point.clone();
+        }
       }
-      return null;
+      return closest;
     };
     const bestAnchor=(position,direction,side)=>{
       const dir=direction.clone().normalize(),right=V(-dir.z,0,dir.x).normalize();
