@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {napeHit,segmentNapeHealth} from './reference-combat.js';
 import {createTitanProjectiles,BOULDER} from './titan-projectiles.js';
+import {severTitanArm,canTitanSwipe,titanSwipeDamage} from './titan-limbs.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
@@ -32,10 +33,10 @@ export function createEnemySimulation(spawns=[]){
       const direction=destination.clone().sub(enemy.position);direction.y=0;
       const targetDistance=direction.length();
       if(targetDistance>.5){direction.multiplyScalar(1/targetDistance);enemy.forward.lerp(direction,Math.min(1,dt*4)).normalize();}
-      if(enemy.state==='pursue'&&distance<7){
+      if(enemy.state==='pursue'&&distance<7&&canTitanSwipe(enemy)){
         enemy.state='strike';if(enemy.attack===0){
           if(enemy.type==='armored'&&distance<4.8){enemy.attack=8;grab=true;}
-          else{enemy.attack=2.4;damage=enemy.type==='colossus'||enemy.type==='beast'?35:enemy.type==='runner'?18:enemy.type==='armored'?28:24;}
+          else{enemy.attack=2.4;damage=titanSwipeDamage(enemy.type);}
         }
       }else if(targetDistance>.7){enemy.position.addScaledVector(enemy.forward,Math.min(targetDistance,enemy.speed*slow*dt));}
       enemy.position.x=clamp(enemy.position.x,-181,181);enemy.position.z=clamp(enemy.position.z,-181,181);
@@ -114,6 +115,27 @@ export function createEnemyManager(scene,world){
     for(const enemy of candidates){const result=strikeWeakPoint(enemy,origin,direction,damage,9.5);if(result.hit)return result;}
     return {hit:false};
   }
+  function severArm(origin,direction,maxReach=8){
+    // Approximate the two arm sockets on our procedural Titan rigs. This is
+    // deliberately not a claim of exact reference skeletal hit geometry.
+    for(const enemy of simulation.enemies){
+      if(!enemy.alive)continue;
+      const lateral=new THREE.Vector3(-enemy.forward.z,0,enemy.forward.x);
+      for(const side of ['left','right']){
+        const sign=side==='left'?-1:1;
+        const point=enemy.position.clone()
+          .addScaledVector(lateral,sign*enemy.height*.15)
+          .add(V(0,enemy.height*.56,0));
+        const offset=point.clone().sub(origin),along=offset.dot(direction);
+        if(along<0||along>maxReach)continue;
+        const closest=origin.clone().addScaledVector(direction,along);
+        if(closest.distanceTo(point)>Math.max(.7,enemy.height*.055))continue;
+        const result=severTitanArm(enemy,side,{boss:enemy.type==='colossus'});
+        if(result.kind==='limb')return {...result,enemy,point};
+      }
+    }
+    return {kind:'none'};
+  }
   function pulse(position,range,damage){let hits=0;for(const enemy of simulation.enemies){if(enemy.alive&&enemy.position.distanceTo(position)<=range){enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.9;if(enemy.health===0)enemy.alive=false;hits++;}}return hits;}
-  return {enemies:simulation.enemies,update,reset,strike,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
+  return {enemies:simulation.enemies,update,reset,strike,severArm,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
 }
