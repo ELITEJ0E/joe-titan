@@ -7,39 +7,82 @@ import {resolveWorldCollision} from './collision.js';
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const random=(seed)=>()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return (seed>>>0)/4294967296;};
-const CHUNK=110;
-function pixelMaterial(color,seed,variation=27){
-  // Node gameplay tests have no DOM canvas; production browser builds keep
-  // the crisp seeded pixel texture.
+const CHUNK=150;
+// Small generated Minecraft-inspired block textures. Patterns are original
+// (no Mojang textures); nearest filtering retains individual pixel edges.
+function pixelMaterial(color,seed,variation=27,kind=''){
   if(typeof document==='undefined')return new THREE.MeshLambertMaterial({color});
   const rng=random(seed),canvas=document.createElement('canvas');
-  canvas.width=32;canvas.height=32;
+  canvas.width=64;canvas.height=64;
   const ctx=canvas.getContext('2d');
   const base=new THREE.Color(color);
-  for(let y=0;y<32;y+=4)for(let x=0;x<32;x+=4){
-    const n=(rng()-.5)*variation;
-    const c=base.clone().offsetHSL(0,0,n/320);
-    ctx.fillStyle='#'+c.getHexString();ctx.fillRect(x,y,4,4);
-    if(rng()<.12){ctx.fillStyle='rgba(0,0,0,.14)';ctx.fillRect(x,y,4,1);}
+  const masonry=/stone|rock|limestone|brick|road|slate|trim|cobble/.test(kind);
+  const roof=/roof|tile|slate/.test(kind);
+  const timber=/timber|wood|plank/.test(kind);
+  const foliage=/leaf|grass|moss|shrub/.test(kind);
+  for(let y=0;y<64;y+=4)for(let x=0;x<64;x+=4){
+    const grain=(rng()-.5)*variation/255;
+    const c=base.clone().offsetHSL((rng()-.5)*.009,0,grain);
+    ctx.fillStyle='#'+c.getHexString();
+    ctx.fillRect(x,y,4,4);
+    if(rng()<.11){ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(x+1,y+1,2,2);}
   }
+  // Irregular masonry courses and staggered terracotta roof shingles.
+  if(masonry||roof){
+    const row=roof?8:12,unit=roof?12:18;
+    for(let y=0;y<64;y+=row){
+      ctx.fillStyle=roof?'rgba(35,16,12,.28)':'rgba(45,39,38,.22)';
+      ctx.fillRect(0,y,64,1);
+      const shift=(Math.floor(y/row)%2)*Math.floor(unit/2);
+      for(let x=-shift;x<64;x+=unit)ctx.fillRect(x,y,1,row);
+      if(roof){ctx.fillStyle='rgba(255,206,132,.11)';ctx.fillRect(0,y+1,64,1);}
+    }
+  }
+  if(timber){
+    for(let x=2;x<64;x+=12){ctx.fillStyle='rgba(27,17,14,.22)';ctx.fillRect(x,0,2,64);}
+    for(let i=0;i<45;i++){ctx.fillStyle=rng()<.5?'rgba(245,186,115,.1)':'rgba(40,24,15,.18)';ctx.fillRect(rng()*64,rng()*64,1,3+rng()*11);}
+  }
+  if(foliage)for(let i=0;i<92;i++){ctx.fillStyle=rng()<.5?'rgba(19,50,20,.18)':'rgba(220,227,116,.18)';ctx.fillRect(rng()*64,rng()*64,4,4);}
   const texture=new THREE.CanvasTexture(canvas);
   texture.magFilter=THREE.NearestFilter;
   texture.minFilter=THREE.NearestMipmapNearestFilter;
   texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
   texture.colorSpace=THREE.SRGBColorSpace;
+  texture.anisotropy=2;
   return new THREE.MeshLambertMaterial({map:texture,side:THREE.FrontSide});
 }
 function makePalette(){
   const p={
-    limestone:0xc6baa2,stone:0x988e84,stoneDark:0x625d60,
-    plaster:0xdfcba6,plasterCream:0xe9d6b6,plasterDark:0xc2b598,
-    timber:0x614531,wood:0x8c6546,roofRed:0xa84931,roofOrange:0xc36d3f,
-    roofDark:0x693a38,slate:0x4f6170,trim:0xe4cf9d,
-    grass:0x57794c,leaves:0x4d7545,leavesLight:0x739459,
-    road:0x88857b,roadLight:0xaaa49a,water:0x468b9a,
-    gold:0xc7a45e,glass:0x688ca0,glow:0xf0c27d,banner:0x973d38
+    limestone:0xd3c8b6,stone:0x9d978d,stoneDark:0x605e60,
+    rock:0x92928b,rockDeep:0x5f6667,moss:0x627b54,
+    plaster:0xd8c3a6,plasterCream:0xece0c6,plasterDark:0xc6b79c,
+    timber:0x50382d,wood:0x896244,woodDark:0x392a27,
+    roofRed:0xa75137,roofOrange:0xc2744d,roofDark:0x703f3a,roofTile:0xba6044,
+    slate:0x64717a,trim:0xe0c5a3,brick:0xae745b,
+    grass:0x668451,leaves:0x477b43,leavesLight:0x7ea75c,shrub:0x648f44,
+    road:0x9c9a90,roadLight:0xb9aa91,cobble:0x777771,water:0x387e9e,foam:0x94c6cd,
+    gold:0xd2ab62,glass:0x6a8eab,glow:0xffcb85,banner:0xb34c43,
+    sand:0xc8b78c,flower:0xc68d6a
   };
-  return Object.fromEntries(Object.entries(p).map(([name,color],i)=>[name,pixelMaterial(color,3001+i*918,16+9*(i%3))]));
+  return Object.fromEntries(Object.entries(p).map(([name,color],i)=>[name,pixelMaterial(color,3001+i*918,24+8*(i%3),name)]));
+}
+function addAtmosphere(scene){
+  // Vertex-based sky gradients / sunset haze; a single inexpensive draw call.
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(1000,24,16),new THREE.ShaderMaterial({
+    side:THREE.BackSide,depthWrite:false,fog:false,
+    vertexShader:`varying vec3 vDir;void main(){vDir=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:`varying vec3 vDir;
+      void main(){
+        vec3 d=normalize(vDir);
+        float warm=clamp(0.55-d.y*1.55,0.0,1.0);
+        vec3 sky=mix(vec3(0.24,0.47,0.66),vec3(1.0,0.66,0.44),warm);
+        float glow=pow(max(dot(d,normalize(vec3(-0.7,0.37,-0.55))),0.0),17.0);
+        float sun=pow(max(dot(d,normalize(vec3(-0.7,0.37,-0.55))),0.0),320.0);
+        sky+=vec3(0.45,0.22,0.1)*glow+vec3(1.0,0.73,0.35)*sun*0.7;
+        gl_FragColor=vec4(sky,1.0);
+      }`
+  }));
+  sky.name='Voxel sunset sky';sky.frustumCulled=false;sky.renderOrder=-1000;scene.add(sky);
 }
 export function createVoxelWorld(scene){
   const rng=random(406157),palette=makePalette();
@@ -48,11 +91,13 @@ export function createVoxelWorld(scene){
     landmarks:{cathedral:[0,-28],plaza:[42,30],citadel:[-98,-90],arena:[-92,38],market:[93,51],townHall:[91,5],harbour:[105,98],canalZ:117},
     spawnPoint:V(35,1,32),style:'voxel',elapsed:0
   };
-  scene.background=new THREE.Color(0x9ac6e2);
-  scene.fog=new THREE.FogExp2(0xb4c6c4,.0022);
-  scene.add(new THREE.HemisphereLight(0xf0e7cb,0x586451,2.2));
-  const sunlight=new THREE.DirectionalLight(0xffddb0,2.45);
-  sunlight.position.set(-95,165,-115);
+  scene.background=new THREE.Color(0xe6b18f);
+  scene.fog=new THREE.FogExp2(0xc6afa0,.00145);
+  addAtmosphere(scene);
+  scene.add(new THREE.HemisphereLight(0xffe8ce,0x5c675f,1.6));
+  scene.add(new THREE.AmbientLight(0xffedd7,.22));
+  const sunlight=new THREE.DirectionalLight(0xffd0a0,2.6);
+  sunlight.position.set(-175,145,-125);
   sunlight.castShadow=true;sunlight.shadow.mapSize.set(1024,1024);
   sunlight.shadow.camera.left=-194;sunlight.shadow.camera.right=194;
   sunlight.shadow.camera.top=194;sunlight.shadow.camera.bottom=-194;
