@@ -189,18 +189,29 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
  scene.add(sun);
  scene.background=new THREE.Color(0xaec3d6);
  scene.fog=new THREE.Fog(0xbac9d5,125,418);
+ let currentPreset=VISUAL_PRESETS[normaliseVisualQuality(mode)],menuClarity=false;
+ function refreshFog(){
+  // The custom voxel shader has its own fog uniforms; update BOTH that
+  // shader and Three.js fog so the title screen actually looks clearer.
+  uniforms.uFogNear.value=menuClarity?210:currentPreset.fogNear;
+  uniforms.uFogFar.value=menuClarity?710:currentPreset.fogFar;
+  scene.fog.near=menuClarity?200:currentPreset.fogNear;
+  scene.fog.far=menuClarity?760:currentPreset.fogFar+28;
+ }
+ function setMenuClarity(value){
+  menuClarity=!!value;refreshFog();
+ }
  function setQuality(quality){
   const p=VISUAL_PRESETS[normaliseVisualQuality(quality)];
-  uniforms.uFogNear.value=p.fogNear;uniforms.uFogFar.value=p.fogFar;
+  currentPreset=p;refreshFog();
   uniforms.uCloudShadow.value=p.cloudShadow;uniforms.uEdgeAO.value=p.edgeAO;
   uniforms.uSunShadow.value=p.sunShadow;
   skyUniforms.uCloudOpacity.value=p.bloom ? .34 : .12;
-  scene.fog.near=p.fogNear;scene.fog.far=p.fogFar+28;
   sun.shadow.mapSize.set(p.shadowMap,p.shadowMap);
   if(sun.shadow.map)sun.shadow.map.dispose();
   sun.shadow.map=null;sun.shadow.needsUpdate=true;
  }
  function animate(time){uniforms.uTime.value=time;skyUniforms.uTime.value=time;}
  setQuality(mode);
- return {material,setQuality,animate,sky,sun,ambient};
+ return {material,setQuality,setMenuClarity,animate,sky,sun,ambient};
 }

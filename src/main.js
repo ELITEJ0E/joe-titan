@@ -12,6 +12,7 @@ import {createRangedCombat} from './ranged-combat.js';
 import {createMultiplayer} from './multiplayer.js';
 import {MISSION_MODES,MISSION_RECORDS_KEY,readMissionRecords,recordMission} from './missions.js';
 import {createScoutCutEffects} from './scout-cut-effects.js';
+import {escapeAction,titleCameraPose} from './menu-presentation.js';
 
 const $=(id)=>document.getElementById(id);
 const canvas=$('game');
@@ -94,7 +95,9 @@ async function init(){
   cutEffects=createScoutCutEffects(scene);
   enemies=createEnemyManager(scene,world);supplies=createSupplyDrops(scene,world);ranged=createRangedCombat(scene,world,enemies);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
-  camera.position.set(115,91,102);camera.lookAt(0,24,-10);
+  world.setMenuClarity?.(true);
+  const intro=titleCameraPose(0);
+  camera.position.set(...intro.position);camera.lookAt(...intro.target);camera.fov=intro.fov;camera.updateProjectionMatrix();
   window.addEventListener('resize',resize);
   attachEvents();
   requestAnimationFrame(loop);
@@ -113,13 +116,23 @@ async function enterImmersive(){
 }
 function startOrResume(){
   started=true;paused=false;finished=false;
+  world.setMenuClarity?.(false);
   menu.classList.add('hidden');missionSelect.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
   mobileControls?.classList.remove('hidden');
   canvas.focus();accumulator=0;
   if(matchMedia('(pointer: coarse)').matches)enterImmersive();
   requestControl();
 }
-function halt(){if(!started||finished)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Unhook, reset your aim, and resume the run.';}
+function halt(){if(!started||finished||paused)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Press ESC again to resume, or return to the main menu.';}
+function quitToMainMenu(){
+  if(document.pointerLockElement===canvas)document.exitPointerLock();
+  clearInputs();started=false;paused=false;finished=false;accumulator=0;
+  hud.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.add('hidden');
+  mobileControls?.classList.add('hidden');menu.classList.remove('hidden');
+  world.setMenuClarity?.(true);
+  updateMissionBoard();
+  document.activeElement?.blur?.();
+}
 function startFresh(mode='course'){
   missionMode=MISSION_MODES.some(mission=>mission.id===mode)?mode:'course';
   practice=missionMode!=='course';courseIndex=missionMode==='course'?0:TOTAL;elapsed=0;finished=false;
@@ -237,6 +250,7 @@ function attachEvents(){
   $('missionsBackButton').onclick=()=>{missionSelect.classList.add('hidden');menu.classList.remove('hidden');};
   missionSelect.querySelectorAll('[data-mission]').forEach((button)=>{button.onclick=()=>startFresh(button.dataset.mission);});
   $('resumeButton').onclick=()=>startOrResume();$('restartButton').onclick=()=>startFresh(missionMode);$('againButton').onclick=()=>startFresh(missionMode);
+  $('quitMenuButton').onclick=quitToMainMenu;
   $('freeFlightButton').onclick=()=>startFresh('free');$('resultsBoardButton').onclick=showMissionBoard;
   $('trialButton').onclick=()=>startFresh('course');
   $('photoButton').onclick=()=>savePhoto();
@@ -273,7 +287,14 @@ function attachEvents(){
   });
   document.addEventListener('keydown',(event)=>{
     if(started&&!paused&&!finished&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code))event.preventDefault();
-    if(event.code==='Escape'){halt();if(document.pointerLockElement===canvas)document.exitPointerLock();return;}
+    if(event.code==='Escape'){
+      event.preventDefault();
+      const action=escapeAction({started,paused,finished,repeat:event.repeat});
+      if(action==='pause'){
+        halt();if(document.pointerLockElement===canvas)document.exitPointerLock();
+      }else if(action==='resume')startOrResume();
+      return;
+    }
     if(event.code==='KeyK'&&!event.repeat){toggleGraphicsQuality();return;}
     if(event.code==='KeyH'&&started&&!finished){if(document.pointerLockElement===canvas)document.exitPointerLock();halt();return;}
     if(!started||paused||finished)return;
@@ -423,10 +444,11 @@ function loop(ms){
     if(player.recoveries>lastRecovery){lastRecovery=player.recoveries;clearInputs();showToast('FLIGHT RECOVERED · REDEPLOYED TO CENTRAL PLAZA');}
     if(gameTime-lastHud>.08){hudUpdate();lastHud=gameTime;}
   }else if(!started){
-    // A gently orbiting live world is the title screen background.
-    const a=seconds*.075+.6;
-    camera.position.set(Math.sin(a)*218,142+Math.sin(seconds*.21)*8,Math.cos(a)*218);
-    camera.lookAt(0,9,-4);
+    // Bring the city architecture close enough to read through the title UI.
+    const intro=titleCameraPose(seconds);
+    camera.position.set(...intro.position);
+    camera.lookAt(...intro.target);
+    if(Math.abs(camera.fov-intro.fov)>.01){camera.fov=intro.fov;camera.updateProjectionMatrix();}
   }
   world.animate(gameTime,dt);
   cutEffects?.update(dt);

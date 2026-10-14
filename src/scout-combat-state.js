@@ -7,7 +7,7 @@ export const SCOUT_ATTACK_TIMING=Object.freeze({
  buffer:.45
 });
 export function createScoutAttackState(){
- return {kind:'idle',phase:'idle',elapsed:0,remaining:0,buffer:null,bufferTime:0,hitQueued:null};
+ return {kind:'idle',phase:'idle',elapsed:0,remaining:0,buffer:null,bufferTime:0,hitQueued:null,hitDone:false};
 }
 export function beginScoutAttack(state,kind='slash'){
  if(!(kind in SCOUT_ATTACK_TIMING))return false;
@@ -16,7 +16,7 @@ export function beginScoutAttack(state,kind='slash'){
    return false;
  }
  state.kind=kind;state.phase='windup';state.remaining=SCOUT_ATTACK_TIMING[kind].windup;
- state.elapsed=0;state.hitQueued=null;state.buffer=null;state.bufferTime=0;
+ state.elapsed=0;state.hitQueued=null;state.hitDone=false;state.buffer=null;state.bufferTime=0;
  return true;
 }
 export function advanceScoutAttack(state,dt,{canStartBuffered=true}={}){
@@ -29,11 +29,17 @@ export function advanceScoutAttack(state,dt,{canStartBuffered=true}={}){
  while(state.kind!=='idle'&&left>0){
    const elapsed=Math.min(left,state.remaining);
    state.elapsed+=elapsed;state.remaining-=elapsed;left-=elapsed;
-   if(state.remaining>1e-8)break;
    const timing=SCOUT_ATTACK_TIMING[state.kind];
+   // Resolve contact after the animated arm has traversed the center of its
+   // cut (58% of the strike phase), not on the windup/strike boundary.
+   // Both the timing and visual pose use the SAME strike progress.
+   if(state.phase==='strike'&&!state.hitDone&&
+       state.remaining<=timing.strike*.42+1e-8){
+     state.hitQueued=state.kind;state.hitDone=true;
+   }
+   if(state.remaining>1e-8)break;
    if(state.phase==='windup'){
      state.phase='strike';state.remaining=timing.strike;
-     state.hitQueued=state.kind; // one hit event at start of the active swing
    }else if(state.phase==='strike'){
      state.phase='recover';state.remaining=timing.recover;
    }else{
