@@ -61,7 +61,7 @@ test('directional gas adds gravity-relative lift without replacing swing velocit
   assert.equal(v.x,12);
   assert.ok(v.z < -7.2 && v.z > -7.6);
   // Directional lift and fast-fall cushioning both act on this descent.
-  assert.ok(v.y > -3.4 && v.y < -2.9);
+  assert.ok(Math.abs(v.y+6)<1e-9,'descent assist stops at the -6 m/s threshold');
 });
 
 test('reference gas boost cushions only sufficiently fast descent',()=>{
