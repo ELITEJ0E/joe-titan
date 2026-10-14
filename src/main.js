@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createVoxelWorld} from './voxel-city.js';
+import {loadMinecraftWorld} from './minecraft-world.js';
 import {createPlayer} from './player.js';
 import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, selectAspect, updateAspect} from './aspects.js';
@@ -41,7 +42,7 @@ function playBeep(type='hook'){
     gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(type==='beacon'?.07:.03,now+.014);gain.gain.exponentialRampToValueAtTime(.0001,now+.22);osc.connect(gain).connect(ctx.destination);osc.start(now);osc.stop(now+.24);
   }catch{}
 }
-function init(){
+async function init(){
   scene=new THREE.Scene();
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
   renderer.setSize(innerWidth,innerHeight,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.25));
@@ -50,7 +51,13 @@ function init(){
   camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.15,1600);
   // Build the lightweight voxel city directly. No old procedural map or giant
   // GLB is constructed, fetched, raycast, or temporarily allocated.
-  world=createVoxelWorld(scene);
+  try {
+    world=await loadMinecraftWorld(scene);
+    console.info('[JOE TITAN] Minecraft Shiganshina world loaded:',world.stats);
+  } catch(error) {
+    console.info('[JOE TITAN] Optional Minecraft world unavailable; using procedural city:',error.message);
+    world=createVoxelWorld(scene);
+  }
   player=createPlayer(scene,world,camera);
   enemies=createEnemyManager(scene,world);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
@@ -335,4 +342,4 @@ function loop(ms){
   if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
   renderer.render(scene,camera);
 }
-try{init();}catch(error){console.error(error);$('startMessage').textContent='Unable to initialize 3D renderer: '+error.message;$('startButton').disabled=true;}
+init().catch(error=>{console.error(error);$('startMessage').textContent='Unable to initialize 3D renderer: '+error.message;$('startButton').disabled=true;});
