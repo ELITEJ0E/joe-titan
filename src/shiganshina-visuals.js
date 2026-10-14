@@ -2,8 +2,8 @@ import * as THREE from 'three';
 // Original Minecraft-inspired pixel atlas and physically evocative (not PBR) lighting.
 // No third-party shader-pack or Minecraft textures are included.
 export const VISUAL_PRESETS=Object.freeze({
-  performance:Object.freeze({pixelRatio:1.12,exposure:1.15,fogNear:112,fogFar:332,cloudShadow:.07,edgeAO:.12,bloom:false,shadowMap:1024}),
-  cinematic:Object.freeze({pixelRatio:1.35,exposure:1.07,fogNear:78,fogFar:285,cloudShadow:.19,edgeAO:.22,bloom:true,shadowMap:2048})
+  performance:Object.freeze({pixelRatio:1.12,exposure:1.13,fogNear:125,fogFar:390,cloudShadow:.06,edgeAO:.10,sunShadow:.70,bloom:false,shadowMap:1024}),
+  cinematic:Object.freeze({pixelRatio:1.35,exposure:1.10,fogNear:105,fogFar:365,cloudShadow:.15,edgeAO:.16,sunShadow:1,bloom:true,shadowMap:2048})
 });
 export const normaliseVisualQuality=v=>v==='cinematic'?'cinematic':'performance';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -57,9 +57,12 @@ export function createShiganshinaAtlas(colors){
 }
 const vs=`
 attribute float aTile;
-varying float vTile;varying vec2 vUV;varying vec3 vWorld;varying vec3 vNormal;
+attribute float aShadow;
+attribute float aAO;
+varying float vTile;varying float vShadow;varying float vAO;
+varying vec2 vUV;varying vec3 vWorld;varying vec3 vNormal;
 void main(){
- vTile=aTile;vUV=uv;
+ vTile=aTile;vShadow=aShadow;vAO=aAO;vUV=uv;
  vec4 w=modelMatrix*vec4(position,1.);
  vWorld=w.xyz;vNormal=normalize(mat3(modelMatrix)*normal);
  gl_Position=projectionMatrix*viewMatrix*w;
@@ -67,8 +70,9 @@ void main(){
 const fs=`
 uniform sampler2D uAtlas;
 uniform vec3 uSunDir,uSunTint,uSkyTint,uFogColor;
-uniform float uTime,uFogNear,uFogFar,uCloudShadow,uEdgeAO;
-varying float vTile;varying vec2 vUV;varying vec3 vWorld;varying vec3 vNormal;
+uniform float uTime,uFogNear,uFogFar,uCloudShadow,uEdgeAO,uSunShadow;
+varying float vTile;varying float vShadow;varying float vAO;
+varying vec2 vUV;varying vec3 vWorld;varying vec3 vNormal;
 void main(){
  vec2 tile=vec2(mod(vTile,8.),floor(vTile/8.));
  vec2 uv=fract(vUV+.00001);
@@ -76,15 +80,20 @@ void main(){
  vec3 base=texture2D(uAtlas,atlasUV).rgb;
  vec3 n=normalize(vNormal);
  float sun=max(dot(n,uSunDir),0.);
- vec3 lit=base*(uSkyTint*(.52+max(n.y,0.)*.19)+uSunTint*sun*.80);
- if(n.y<-.5)lit*=.56;
+ // Color-temperature separation inspired by cinematic Minecraft shader packs.
+ // Sunlight is baked from the imported voxel grid; it shades entire facades,
+ // while the cool hemispheric fill keeps shadowed streets readable.
+ float bakedSun=mix(1.0,clamp(vShadow,.28,1.0),uSunShadow);
+ vec3 lit=base*(uSkyTint*(.56+max(n.y,0.)*.20)+uSunTint*sun*bakedSun*.96);
+ lit*=mix(1.0,clamp(vAO,.52,1.0),.87);
+ if(n.y<-.5)lit*=.62;
  // Screen-space AO is too costly in fast ODM flight. Approximate block seams.
  vec2 edges=min(uv,1.-uv);
- float seam=1.-smoothstep(.01,.065,min(edges.x,edges.y));
+ float seam=1.-smoothstep(.01,.075,min(edges.x,edges.y));
  lit*=1.-uEdgeAO*seam;
  if(vTile>7.5&&vTile<10.6){
-   lit*=vec3(1.09,.96,.92);
-   lit+=base*sun*.06;
+   lit*=vec3(1.12,.98,.91);
+   lit+=base*sun*bakedSun*.045;
  }else if(vTile>10.5&&vTile<11.5){
    float fresnel=pow(1.-abs(dot(n,normalize(cameraPosition-vWorld))),2.);
    lit=mix(lit,vec3(.40,.67,.84),.11+fresnel*.26);
@@ -94,7 +103,7 @@ void main(){
    lit=mix(lit,vec3(.34,.67,.76),.13+fresnel*.31);
    lit+=vec3(.09,.14,.12)*max(0.,wave)*sun;
  }else if(vTile>26.5&&vTile<27.5){
-   lit+=base*vec3(.65,.39,.16);
+   lit+=base*vec3(.80,.46,.18);
  }
  if(uCloudShadow>0.){
    float cloud=sin(vWorld.x*.032+uTime*.022)*sin(vWorld.z*.029-uTime*.014);
@@ -102,8 +111,9 @@ void main(){
  }
  float range=length(cameraPosition-vWorld);
  float fog=smoothstep(uFogNear,uFogFar,range);
- fog*=1.+.17*exp(-max(vWorld.y-5.,0.)*.08);
- lit=mix(lit,uFogColor,clamp(fog*.88,0.,.88));
+ fog*=1.+.21*exp(-max(vWorld.y-5.,0.)*.065);
+ // Keep distant walls recognisable; the old dense pink fog erased geometry.
+ lit=mix(lit,uFogColor,clamp(fog*.60,0.,.68));
  gl_FragColor=vec4(lit,1.);
  #include <tonemapping_fragment>
  #include <colorspace_fragment>
@@ -116,10 +126,10 @@ varying vec3 vDir;
 void main(){
  vec3 dir=normalize(vDir);
  float altitude=smoothstep(-.18,.75,dir.y);
- vec3 sky=mix(vec3(.86,.60,.46),vec3(.27,.50,.71),altitude);
- float facing=max(dot(dir,normalize(vec3(-.57,.70,-.37))),0.);
- sky+=vec3(1.,.49,.21)*pow(facing,22.)*.36;
- sky+=vec3(1.,.83,.48)*pow(facing,550.)*.84;
+ vec3 sky=mix(vec3(.77,.70,.69),vec3(.27,.53,.77),altitude);
+ float facing=max(dot(dir,normalize(vec3(-.66,.69,-.30))),0.);
+ sky+=vec3(1.,.51,.27)*pow(facing,22.)*.29;
+ sky+=vec3(1.,.84,.53)*pow(facing,550.)*.78;
  if(uCloudOpacity>0.){
   vec2 p=dir.xz/max(.16,dir.y+.45);
   float drift=uTime*.0012;
@@ -134,12 +144,12 @@ void main(){
 }`;
 export function createShiganshinaVisuals(scene,colors,mode='performance'){
  const atlas=createShiganshinaAtlas(colors);
- const sunDir=new THREE.Vector3(-.57,.70,-.37).normalize();
+ const sunDir=new THREE.Vector3(-.66,.69,-.30).normalize();
  const uniforms={
    uAtlas:{value:atlas},uSunDir:{value:sunDir},
-   uSunTint:{value:new THREE.Color(0xffcc98)},uSkyTint:{value:new THREE.Color(0x9fb9d9)},
-   uFogColor:{value:new THREE.Color(0xc2b5a8)},uTime:{value:0},
-   uFogNear:{value:112},uFogFar:{value:332},uCloudShadow:{value:0},uEdgeAO:{value:0}
+   uSunTint:{value:new THREE.Color(0xffd0a1)},uSkyTint:{value:new THREE.Color(0xbad3f0)},
+   uFogColor:{value:new THREE.Color(0xbac9d5)},uTime:{value:0},
+   uFogNear:{value:125},uFogFar:{value:390},uCloudShadow:{value:0},uEdgeAO:{value:0},uSunShadow:{value:0}
  };
  const material=new THREE.ShaderMaterial({uniforms,vertexShader:vs,fragmentShader:fs,side:THREE.FrontSide,toneMapped:true});
  const skyUniforms={uTime:{value:0},uCloudOpacity:{value:.12}};
@@ -159,12 +169,13 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
  sun.shadow.camera.near=1;sun.shadow.camera.far=480;
  sun.shadow.bias=-.00025;sun.shadow.normalBias=.045;
  scene.add(sun);
- scene.background=new THREE.Color(0xd2ac96);
- scene.fog=new THREE.Fog(0xc2b5a8,112,360);
+ scene.background=new THREE.Color(0xaec3d6);
+ scene.fog=new THREE.Fog(0xbac9d5,125,418);
  function setQuality(quality){
   const p=VISUAL_PRESETS[normaliseVisualQuality(quality)];
   uniforms.uFogNear.value=p.fogNear;uniforms.uFogFar.value=p.fogFar;
   uniforms.uCloudShadow.value=p.cloudShadow;uniforms.uEdgeAO.value=p.edgeAO;
+  uniforms.uSunShadow.value=p.sunShadow;
   skyUniforms.uCloudOpacity.value=p.bloom ? .34 : .12;
   scene.fog.near=p.fogNear;scene.fog.far=p.fogFar+28;
   sun.shadow.mapSize.set(p.shadowMap,p.shadowMap);
