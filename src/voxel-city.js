@@ -434,10 +434,16 @@ export function createVoxelWorld(scene){
   };
   // Fallback world keeps the same game-wide graphics setting without adding
   // extra scene geometry or changing the voxel/ODM collision model.
+  let fallbackCinematic=false,menuClarity=false;
+  world.setMenuClarity=(value)=>{
+    menuClarity=!!value;
+    scene.fog.density=menuClarity?.00042:(fallbackCinematic?.00175:.00135);
+  };
   world.setVisualQuality=(quality)=>{
     const cinematic=quality==='cinematic';
+    fallbackCinematic=cinematic;
     sunlight.intensity=cinematic?2.55:2.35;
-    scene.fog.density=cinematic?.00175:.00135;
+    scene.fog.density=menuClarity?.00042:(cinematic?.00175:.00135);
     sunlight.shadow.mapSize.set(cinematic?2048:1024,cinematic?2048:1024);
     if(sunlight.shadow.map)sunlight.shadow.map.dispose();
     sunlight.shadow.map=null;sunlight.shadow.needsUpdate=true;
