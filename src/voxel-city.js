@@ -209,10 +209,10 @@ export function createVoxelWorld(scene){
     obstacle(x,z,wide,wide,h+4);
     world.anchors.push(V(x,h+12,z));
   }
-  for(const x of [-180,0,180])for(const z of [-180,0,180]){
-    if(Math.abs(x)!==180&&Math.abs(z)!==180)continue;
-    tower(x,z,(x===0||z===0)?56:51,14,'roofDark');
-  }
+  for(const x of [-180,180])for(const z of [-180,180])tower(x,z,51,14,'roofDark');
+  // Flanking towers, rather than one blocking the gate passage.
+  for(const x of [-180,180])for(const z of [-27,27])tower(x,z,56,12,'roofDark');
+  for(const z of [-180,180])for(const x of [-27,27])tower(x,z,56,12,'roofDark');
   for(const z of [-180,180]){
     // Lintel spans rather than blocking the gate opening.
     block('stoneDark',0,33,z,31,7,8);
@@ -303,14 +303,15 @@ export function createVoxelWorld(scene){
     mesh.computeBoundingBox();
     scene.add(mesh);drawMeshes++;voxelCount+=group.boxes.length;
   }
-  // Fast analytic axis-aligned surface raycast; no triangle traversal is needed
-  // when grappling against the intentionally block-shaped voxel architecture.
+  // Precompute AABBs once. Camera checks can run each frame, so they must not
+  // allocate hundreds of temporary boxes per ray.
+  const collisionBoxes=collidable.map(c=>new THREE.Box3(
+    V(c.x-c.halfW,0,c.z-c.halfD),V(c.x+c.halfW,c.h,c.z+c.halfD)));
   const ray=new THREE.Ray(),nearPoint=V(0,0,0);
   world.grappleRay=(origin,dir,maxDist=125)=>{
     ray.set(origin,dir.clone().normalize());
     let best=null,closest=maxDist;
-    for(const c of collidable){
-      const box=new THREE.Box3(V(c.x-c.halfW,0,c.z-c.halfD),V(c.x+c.halfW,c.h,c.z+c.halfD));
+    for(const box of collisionBoxes){
       const hit=ray.intersectBox(box,nearPoint);
       if(!hit)continue;
       const dist=origin.distanceTo(hit);
