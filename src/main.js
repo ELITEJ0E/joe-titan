@@ -350,6 +350,7 @@ function hudUpdate(){
   navigation.update(courseIndex,practice,enemies.enemies,active);
   if(debugVisible)$('diagnostics').textContent=`POSITION ${player.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nSPEED ${player.speed.toFixed(1)} m/s · ${player.grounded?'GROUNDED':'AIRBORNE'}\nHOOKS ${player.hooks.map((h,i)=>h?`${i?'R':'L'} ${h.point.distanceTo(player.position).toFixed(1)}/${h.length.toFixed(1)}m`:`${i?'R':'L'} OFF`).join(' · ')}\nCAMERA ${camera.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nRECOVERIES ${player.recoveries} · DRAW CALLS ${renderer.info.render.calls}`;
 }
+const PHYSICS_STEP=1/240;
 let prevTime=0,accumulator=0,physicsTick=0;
 function loop(ms){
   requestAnimationFrame(loop);
@@ -358,31 +359,31 @@ function loop(ms){
   if(started&&!paused&&!finished){
     accumulator+=dt;
     let steps=0;
-    while(accumulator>=1/100&&steps<6){
-      player.yaw+=(Number(input.keys.has('ArrowLeft'))-Number(input.keys.has('ArrowRight')))*.018;
-      player.pitch+=(Number(input.keys.has('ArrowUp'))-Number(input.keys.has('ArrowDown')))*.013;
-      player.yaw-=mobileInput.look.x*.022;
-      player.pitch-=mobileInput.look.y*.016;
+    while(accumulator>=PHYSICS_STEP&&steps<16){
+      player.yaw+=(Number(input.keys.has('ArrowLeft'))-Number(input.keys.has('ArrowRight')))*.018*(PHYSICS_STEP/.01);
+      player.pitch+=(Number(input.keys.has('ArrowUp'))-Number(input.keys.has('ArrowDown')))*.013*(PHYSICS_STEP/.01);
+      player.yaw-=mobileInput.look.x*.022*(PHYSICS_STEP/.01);
+      player.pitch-=mobileInput.look.y*.016*(PHYSICS_STEP/.01);
       // Holding a missed hook retries as the reticle moves onto a building;
       // simultaneous keyboard + mouse binds remain independently attached.
-      hookRetryClock-=.01;
+      hookRetryClock-=PHYSICS_STEP;
       if(hookRetryClock<=0){
         for(let i=0;i<2;i++)if(hookHeld(i)&&!player.hooks[i]&&player.fire(i))playBeep();
         hookRetryClock=.10;
       }
-      player.update(1/100,input,gameTime);
+      player.update(PHYSICS_STEP,input,gameTime);
       physicsTick++;
-      // Physics stays fixed at 100 Hz; network snapshots need only 20 Hz.
-      if(physicsTick%5===0)multiplayer?.update(player,gameTime);
-      const aspectUpdate=updateAspect(aspectState,1/100);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
-      // AI + enemy pose updates at 50 Hz save CPU on dense voxel worlds.
-      const danger=physicsTick%2===0?enemies.update(.02,player.position,gameTime):{damage:0};if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
-      if(!finished)updateMission(1/100);
-      updateChallenge(1/100);
-      accumulator-=1/100;steps++;
+      // Physics integrates at 240 Hz; network snapshots remain 20 Hz.
+      if(physicsTick%12===0)multiplayer?.update(player,gameTime);
+      const aspectUpdate=updateAspect(aspectState,PHYSICS_STEP);if(aspectUpdate.ended){player.clearAspect();showToast(`${aspectUpdate.aspect.name.toUpperCase()} ASPECT FADED`);}
+      // AI + enemy pose updates at 48 Hz save CPU on dense voxel worlds.
+      const danger=physicsTick%5===0?enemies.update(PHYSICS_STEP*5,player.position,gameTime):{damage:0};if(danger.damage){const result=player.takeDamage(danger.damage);if(result.downed){clearActiveAspect();if(missionMode==='survival')completeMission(false);}showToast(result.downed?'FLIGHT LOST · REDEPLOYED':'RIFTBORN STRIKE · ARMOR ABSORBED DAMAGE');}
+      if(!finished)updateMission(PHYSICS_STEP);
+      updateChallenge(PHYSICS_STEP);
+      accumulator-=PHYSICS_STEP;steps++;
       if(paused||finished){accumulator=0;break;}
     }
-    if(steps>=6)accumulator=0;
+    if(steps>=16)accumulator=0;
     player.updateCamera(dt);
     if(player.recoveries>lastRecovery){lastRecovery=player.recoveries;clearInputs();showToast('FLIGHT RECOVERED · REDEPLOYED TO CENTRAL PLAZA');}
     if(gameTime-lastHud>.08){hudUpdate();lastHud=gameTime;}
