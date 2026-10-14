@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {findSafeMinecraftSpawn} from './minecraft-spawn.js';
+import {slideVoxelHorizontal} from './voxel-slide.js';
 // A Minecraft Java Anvil world baked into a compact, greedy-meshed JTVX archive.
 // The archive is user-supplied and optional: no copyrighted map ships in source.
 const ORIGIN=new THREE.Vector3(-152,-10,-146);
@@ -122,12 +123,9 @@ function installVoxelPhysics(world,asset){
     if(solid(prev.x,prev.y-.2,prev.z)){
       pos.copy(world.spawnPoint);vel.set(0,0,0);return true;
     }
-    const torso=pos.y-.2;
-    if(solid(pos.x,torso,pos.z)){
-      if(!solid(prev.x,torso,pos.z)){pos.x=prev.x;vel.x=0;}
-      if(!solid(pos.x,torso,prev.z)){pos.z=prev.z;vel.z=0;}
-      if(solid(pos.x,torso,pos.z)){pos.x=prev.x;pos.z=prev.z;vel.x=0;vel.z=0;}
-    }
+    // Swept horizontal capsule approximation glides along buildings instead
+    // of zeroing both horizontal axes whenever a high-speed hook hits a wall.
+    slideVoxelHorizontal(pos,prev,vel,solid);
     const feet=prev.y-1,ground=roof(pos.x,pos.z,feet-ORIGIN.y+.3);
     if(vel.y<=0&&feet>=ground-.38&&pos.y<=ground+1){pos.y=ground+1;vel.y=0;return true;}
     if(pos.y<=1){pos.y=1;if(vel.y<0)vel.y=0;return true;}
