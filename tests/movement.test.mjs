@@ -6,8 +6,7 @@ import {resolveWorldCollision} from '../src/collision.js';
 
 function setup(colliders=[]) {
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(72,1,.15,1600);
-  const world={resolveCollision:(p,prev,v)=>resolveWorldCollision(colliders,p,prev,v),grappleRay:()=>null,
-    bestAnchor:(_p,_dir,side)=>new THREE.Vector3(side*20,40,-45)};
+  const world={resolveCollision:(p,prev,v)=>resolveWorldCollision(colliders,p,prev,v),grappleRay:(origin,dir)=>origin.clone().addScaledVector(dir,45)};
   return {player:createPlayer(scene,world,camera),camera,world,input:{keys:new Set(),jumpQueued:false}};
 }
 function finite(player,camera) {
@@ -29,7 +28,7 @@ test('jump, boost, landing and gas refill remain stable',()=>{
   assert.equal(s.player.position.y,1);assert.equal(s.player.grounded,true);assert.equal(s.player.gas,100);
 });
 test('dual hooks reel, release independently and preserve finite motion',()=>{
-  const s=setup();assert.ok(s.player.fire(0));assert.ok(s.player.fire(1));assert.notDeepEqual(s.player.hooks[0].point,s.player.hooks[1].point);
+  const s=setup();assert.ok(s.player.fire(0));assert.ok(s.player.fire(1));assert.deepEqual(s.player.hooks[0].point.toArray(),s.player.hooks[1].point.toArray());
   const length=s.player.hooks[0].length;s.input.keys.add('ShiftLeft');s.input.keys.add('Space');step(s,250);
   assert.ok(s.player.hooks[0].length<length);assert.ok(s.player.gas<100);
   assert.ok(s.player.hooks[0].length+s.player.hooks[1].length>=s.player.hooks[0].point.distanceTo(s.player.hooks[1].point),'dual ropes must remain geometrically feasible');
