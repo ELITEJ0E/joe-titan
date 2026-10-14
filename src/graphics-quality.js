@@ -1,0 +1,54 @@
+import * as THREE from 'three';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {VISUAL_PRESETS,normaliseVisualQuality} from './shiganshina-visuals.js';
+
+// Cinematic effects are optional. No postprocessing allocations are made while
+// playing in Performance mode (the default for the high-speed ODM game).
+export function createGraphicsQuality(renderer,scene,camera,world,initial='performance'){
+  let quality='performance',composer=null,renderPass=null,bloomPass=null;
+  const size=()=>({width:window.innerWidth,height:window.innerHeight});
+  function getComposer(){
+    if(composer)return composer;
+    composer=new EffectComposer(renderer);
+    renderPass=new RenderPass(scene,camera);
+    const {width,height}=size();
+    bloomPass=new UnrealBloomPass(new THREE.Vector2(width,height),.20,.24,.90);
+    composer.addPass(renderPass);
+    composer.addPass(bloomPass);
+    composer.addPass(new OutputPass());
+    return composer;
+  }
+  function resize(){
+    const {width,height}=size();
+    const p=VISUAL_PRESETS[quality];
+    const pixelRatio=Math.min(window.devicePixelRatio||1,p.pixelRatio);
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(width,height,false);
+    // Reduce internal render resolution slightly to offset the bloom pass.
+    if(composer){
+      composer.setPixelRatio(pixelRatio*.80);
+      composer.setSize(width,height);
+    }
+  }
+  function setQuality(next){
+    quality=normaliseVisualQuality(next);
+    const p=VISUAL_PRESETS[quality];
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure=p.exposure;
+    renderer.shadowMap.enabled=true;
+    renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    world?.setVisualQuality?.(quality);
+    if(p.bloom)getComposer();
+    resize();
+    return quality;
+  }
+  function render(){
+    if(VISUAL_PRESETS[quality].bloom&&composer)composer.render();
+    else renderer.render(scene,camera);
+  }
+  setQuality(initial);
+  return {setQuality,getQuality:()=>quality,resize,render};
+}
