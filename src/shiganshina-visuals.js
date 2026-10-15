@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import {ATMOSPHERE_DEFAULTS,sampleCinematicAtmosphere,createSkyUniforms,updateSkyUniforms,CINEMATIC_SKY_VERTEX,CINEMATIC_SKY_FRAGMENT} from './cinematic-atmosphere.js';
+import {createVoxelSurfaceAtlas} from './voxel-surface-detail.js';
 // Original Minecraft-inspired pixel atlas and physically evocative (not PBR) lighting.
 // No third-party shader-pack or Minecraft textures are included.
 export const VISUAL_PRESETS=Object.freeze({
-  performance:Object.freeze({pixelRatio:1.12,exposure:1.13,fogNear:125,fogFar:390,cloudShadow:.06,edgeAO:.10,sunShadow:.70,bloom:false,shadowMap:1024}),
-  cinematic:Object.freeze({pixelRatio:1.35,exposure:1.10,fogNear:105,fogFar:365,cloudShadow:.15,edgeAO:.16,sunShadow:1,bloom:true,shadowMap:2048})
+  performance:Object.freeze({pixelRatio:1.12,exposure:1.04,fogNear:140,fogFar:410,cloudShadow:.07,edgeAO:.13,sunShadow:.75,bloom:false,shadowMap:1024,normalStrength:.28,skyQuality:0,contactAO:0}),
+  cinematic:Object.freeze({pixelRatio:1.35,exposure:.98,fogNear:125,fogFar:410,cloudShadow:.25,edgeAO:.20,sunShadow:1,bloom:true,shadowMap:2048,normalStrength:.78,skyQuality:1,contactAO:.72})
 });
 export const normaliseVisualQuality=v=>v==='cinematic'?'cinematic':'performance';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -93,7 +94,8 @@ void main(){
  gl_Position=projectionMatrix*viewMatrix*w;
 }`;
 const fs=`
-uniform sampler2D uAtlas;
+uniform sampler2D uAtlas,uSurfaceAtlas;
+uniform float uNormalStrength;
 uniform vec3 uSunDir,uSunTint,uSkyTint,uFogColor,uHorizonTint,uZenithTint;
 uniform float uTime,uFogNear,uFogFar,uCloudShadow,uEdgeAO,uSunShadow;
 uniform float uSunStrength,uFogStrength,uWetness;
@@ -104,8 +106,16 @@ void main(){
  vec2 uv=fract(vUV+.00001);
  vec2 atlasUV=(tile+vec2(.02)+uv*.96)/vec2(8.,4.);
  vec3 base=texture2D(uAtlas,atlasUV).rgb;
+ vec4 surface=texture2D(uSurfaceAtlas,atlasUV);
  vec3 n=normalize(vNormal);
- float sun=max(dot(n,uSunDir),0.);
+ // Local tangent basis from the FACE NORMAL, so the detail normal is
+ // consistent on roofs, walls and cobblestone without extra vertex data.
+ vec3 tangent=abs(n.y)>.5?vec3(1.,0.,0.):abs(n.x)>.5?vec3(0.,0.,1.):vec3(1.,0.,0.);
+ vec3 bitangent=normalize(cross(n,tangent));
+ vec2 bump=(surface.xy*2.-1.)*uNormalStrength;
+ vec3 detailNormal=normalize(n+tangent*bump.x+bitangent*bump.y);
+ float roughness=surface.a;
+ float sun=max(dot(detailNormal,uSunDir),0.);
  // Color-temperature separation inspired by cinematic Minecraft shader packs.
  // Sunlight is baked from the imported voxel grid; it shades entire facades,
  // while the cool hemispheric fill keeps shadowed streets readable.
@@ -116,9 +126,13 @@ void main(){
  // screen-space reflections or blurring the crisp 32px atlas.
  vec3 viewer=normalize(cameraPosition-vWorld);
  vec3 h=normalize(viewer+uSunDir);
- float gloss=pow(max(dot(n,h),0.0),32.0);
- float porous=step(0.5,vTile)*(.82+step(7.5,vTile)*.18);
- lit+=uSunTint*gloss*uWetness*porous*.11;
+ float effectiveRoughness=clamp(roughness*(1.-uWetness*.35),.10,1.);
+ float specPower=mix(106.,8.,effectiveRoughness);
+ float gloss=pow(max(dot(detailNormal,h),0.0),specPower);
+ // Rough stone scatters broad, subtle highlights; metal/glass/wet roofs
+ // get tight specular, following the actual generated surface normals.
+ float reflectance=.018+pow(1.-effectiveRoughness,2.)*.4;
+ lit+=uSunTint*gloss*reflectance*(.28+uWetness*.85)*max(sun,.03);
  if(n.y<-.5)lit*=.62;
  // Screen-space AO is too costly in fast ODM flight. Approximate block seams.
  vec2 edges=min(uv,1.-uv);
@@ -133,7 +147,7 @@ void main(){
  }else if(vTile>16.5&&vTile<17.5){
    float wave=sin(vWorld.x*.48+uTime*1.35)*sin(vWorld.z*.37-uTime*1.15);
    float fresnel=pow(1.-clamp(abs(dot(n,viewer)),0.,1.),4.);
-   float spec=pow(max(dot(reflect(-uSunDir,n),viewer),0.),72.);
+   float spec=pow(max(dot(reflect(-uSunDir,detailNormal),viewer),0.),72.);
    vec3 reflection=mix(uHorizonTint,uZenithTint,clamp(reflect(-viewer,n).y*.5+.5,0.,1.));
    vec3 shallow=vec3(.21,.46,.53);
    lit=mix(lit,shallow,.28);
@@ -163,11 +177,12 @@ void main(){
 }`;
 export function createShiganshinaVisuals(scene,colors,mode='performance'){
  const atlas=createShiganshinaAtlas(colors);
+ const surfaceAtlas=createVoxelSurfaceAtlas();
  const state={...ATMOSPHERE_DEFAULTS};
  let sample=sampleCinematicAtmosphere(state);
  const sunDir=sample.sunDirection.clone();
  const uniforms={
-   uAtlas:{value:atlas},uSunDir:{value:sunDir},
+   uAtlas:{value:atlas},uSurfaceAtlas:{value:surfaceAtlas},uNormalStrength:{value:0},uSunDir:{value:sunDir},
    uSunTint:{value:new THREE.Color(0xffd0a1)},uSkyTint:{value:new THREE.Color(0xbad3f0)},
    uFogColor:{value:sample.fog.clone()},uTime:{value:0},
    uHorizonTint:{value:sample.horizon.clone()},uZenithTint:{value:sample.zenith.clone()},
@@ -214,6 +229,8 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
   const p=VISUAL_PRESETS[normaliseVisualQuality(quality)];
   currentPreset=p;refreshFog();
   uniforms.uCloudShadow.value=p.cloudShadow;uniforms.uEdgeAO.value=p.edgeAO;
+  uniforms.uNormalStrength.value=p.normalStrength;
+  skyUniforms.uSkyQuality.value=p.skyQuality;
   uniforms.uSunShadow.value=p.sunShadow;
   skyUniforms.uCloudOpacity.value=sample.clouds*(p.bloom?1.45:1);
   sun.shadow.mapSize.set(p.shadowMap,p.shadowMap);
@@ -252,5 +269,5 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
   }
  }
  setQuality(mode);animate(0);
- return {material,waterMaterial,setQuality,setMenuClarity,setAtmosphere,animate,sky,sun,ambient,atlas};
+ return {material,waterMaterial,setQuality,setMenuClarity,setAtmosphere,animate,sky,sun,ambient,atlas,surfaceAtlas};
 }
