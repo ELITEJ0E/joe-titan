@@ -192,3 +192,101 @@ body.ackerman-active .vignette{opacity:.73;
 
 /* Keep the floating pause button above the full-right pan layer only in active flight. */
 body:not(.flight-active) .mobile-pause-button{display:none!important}
+
+/* Desktop 100%-zoom sizing and all-viewport responsive layout. */
+html,body{height:100%;height:100dvh;min-height:0}
+.overlay{padding-block:clamp(8px,2vh,24px);overflow-x:hidden;overflow-y:auto}
+.menu-shell{width:min(600px,calc(100vw - 44px));max-height:calc(100dvh - 24px);
+  overflow-x:hidden;overflow-y:auto;scrollbar-width:thin;padding:12px 4px 16px 0}
+.menu-shell h1{font-size:clamp(56px,min(10vw,15dvh),140px)}
+.menu-shell h2{font-size:clamp(23px,5vh,50px);margin:8px 0 12px}
+.dividerline{margin:12px 0 clamp(12px,4vh,32px)}
+.feature-row{margin:clamp(9px,2vh,20px) 0;gap:clamp(8px,2vw,26px)}
+.feature-row b{font-size:clamp(23px,4vh,35px)}
+.start,.secondary{padding:clamp(9px,1.45vh,15px) 15px;font-size:clamp(10px,1.2vh,12px)}
+.secondary{margin-top:7px}
+.menu-controls{margin-top:clamp(12px,2vh,25px);gap:9px 15px}
+.intro{font-size:clamp(11px,1.5vh,14px);line-height:1.55}
+.multiplayer-lobby{margin-top:12px}
+.pause .menu-shell{width:min(475px,calc(100vw - 38px))}
+.pause .menu-controls{margin-top:12px;gap:9px}
+.pause-title{font-size:clamp(36px,8vh,80px)!important}
+.mission-shell{max-height:calc(100dvh - 16px);overflow-y:auto;width:min(1120px,calc(100vw - 32px));padding-block:15px}
+.mission-cards{gap:clamp(6px,1.4vh,12px)}
+.mission-card{min-height:clamp(112px,21vh,172px);padding:clamp(10px,1.7vh,17px)}
+.mission-card-top{margin-bottom:8px}
+.mission-card>strong{font-size:clamp(21px,3.3vh,28px)}
+.ackerman-pc-button{pointer-events:auto;width:100%;margin-top:8px;padding:7px 9px;display:flex;
+  align-items:center;justify-content:space-between;gap:4px;
+  background:#29445dc9;border:1px solid #b4dcff90;color:#d5edff;
+  font:800 10px 'Manrope',Arial,sans-serif;letter-spacing:.09em}
+.ackerman-pc-button span{font-size:8px;color:#ffc88e;white-space:nowrap}
+.ackerman-pc-button.active{background:#ad9a4fba;color:#fff3bf;border-color:#ffe09d}
+@media(max-height:610px) and (min-width:901px){
+  .left-info{top:100px}.checkpoint{font-size:36px}.bottom-hud{bottom:14px}
+  .gauge-circle{width:90px;height:90px}.gauge-circle span{font-size:40px}
+  .systems{width:min(29vw,320px)}.topbar{top:12px}
+  .map-panel{top:60px;transform:scale(.8);transform-origin:top right}
+}
+@media(max-width:900px),(pointer:coarse){
+  .touch-move-zone{position:absolute;inset:0 50% 0 0;z-index:1;pointer-events:auto;
+    touch-action:none;user-select:none;-webkit-user-select:none}
+  .touch-move-zone .floating-stick{display:none;position:absolute;
+    width:86px;height:86px;margin-left:-43px;margin-top:-43px;
+    left:50%;top:50%;bottom:auto;pointer-events:none;
+    background:#0c25358c;box-shadow:inset 0 0 0 8px #14374d45;border:1px solid #d3eaff6a}
+  .touch-move-zone .floating-stick span{width:31px;height:31px}
+  .touch-move-zone .floating-stick small{display:none}
+  .touch-actions{right:max(12px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));
+    width:min(30vw,215px);min-width:168px;
+    height:clamp(148px,42vh,240px);display:block}
+  .touch-btn{position:absolute;display:grid;place-items:center;border-radius:50%;width:clamp(40px,6.7vw,56px);
+    height:clamp(40px,6.7vw,56px);min-height:0;
+    font-size:clamp(7px,1vw,10px);line-height:1.1;
+    box-shadow:0 3px 12px #0008}
+  .touch-btn.cable-left{left:0;top:24%}
+  .touch-btn.cable-right{right:0;top:24%}
+  .touch-btn.boost{right:24%;bottom:0;width:clamp(52px,8vw,74px);
+    height:clamp(52px,8vw,74px);font-size:10px;border-color:#ffd4a8}
+  .touch-btn.jump{left:9%;bottom:6%}
+  .touch-btn.attack{right:5%;top:0}
+  .touch-btn.shoot{left:28%;top:1%}
+  .touch-btn.aspect-btn{left:33%;top:46%;width:clamp(49px,7vw,62px);
+    height:clamp(49px,7vw,62px);font-size:7px}
+  .ackerman-pc-button{display:none}
+  .systems{opacity:.73}
+  .bottom-hud{pointer-events:none}
+  .touch-look-zone{inset:0 0 0 50%}
+}
+@media(max-width:650px) and (orientation:portrait){
+  .touch-actions{width:164px;min-width:0;height:193px;bottom:max(20px,env(safe-area-inset-bottom))}
+  .touch-btn{width:43px;height:43px}
+  .touch-btn.boost{width:61px;height:61px;right:23%}
+  .touch-btn.aspect-btn{width:53px;height:53px;left:32%;top:46%}
+  .touch-btn.shoot{top:0;left:27%}
+  .touch-move-zone .floating-stick{width:78px;height:78px;margin-left:-39px;margin-top:-39px}
+  .bottom-hud{bottom:226px;width:136px}
+  .mission-shell{width:calc(100vw - 20px)}
+}
+@media(max-height:400px) and (orientation:landscape){
+  .touch-actions{height:clamp(132px,63vh,173px);width:170px;bottom:6px}
+  .touch-btn{width:38px;height:38px}
+  .touch-btn.boost{width:53px;height:53px}
+  .touch-btn.aspect-btn{width:47px;height:47px;font-size:6px}
+  .touch-move-zone .floating-stick{width:70px;height:70px;margin-left:-35px;margin-top:-35px}
+  .bottom-hud{bottom:4px;width:113px}
+}
+@media(max-width:650px){.menu-shell{margin-left:14px;width:calc(100vw - 28px)}
+  .menu-shell h1{font-size:clamp(52px,13vw,78px)}.feature-row{gap:9px}
+  .menu-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(prefers-reduced-motion:reduce){.touch-btn,.start,.secondary{transition:none}}
+/* Ackerman's time-stop ambience: the pilot remains visible, while the
+   warm yellow overlay and muted vignette communicate slowed surroundings. */
+.ackerman-slowmo-overlay{display:none;position:fixed;inset:0;z-index:4;pointer-events:none;
+  background:linear-gradient(135deg,#f6d76824,#a37d1933),
+    radial-gradient(circle at center,#d7b54b03 20%,#6d551a42 100%);
+  mix-blend-mode:screen}
+body.ackerman-active .ackerman-slowmo-overlay{display:block}
+body.ackerman-active .vignette{opacity:.87;
+  background:radial-gradient(ellipse at center,#7556181a 30%,#251c0a8c 100%)}
