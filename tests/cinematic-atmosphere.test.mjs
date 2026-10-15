@@ -48,7 +48,7 @@ test('imported voxel atlas remains pixel sharp and water receives separate trans
   for(const token of ['uWetness','uFogStrength','uHorizonTint','vAO','vShadow','uTime']){
    assert.ok(visual.material.fragmentShader.includes(token),token);
   }
-  assert.ok(visual.material.vertexShader.includes('w.y+=.045'));
+  assert.ok(visual.material.vertexShader.includes('w.y+=.095'));
   const count=scene.children.length;
   visual.setAtmosphere({stormAmount:.85,weather:'rain'});
   visual.animate(2);
