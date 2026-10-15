@@ -189,3 +189,6 @@ body.ackerman-active .vignette{opacity:.73;
   .touch-btn{min-height:33px}
   .bottom-hud{width:115px;bottom:6px}
 }
+
+/* Keep the floating pause button above the full-right pan layer only in active flight. */
+body:not(.flight-active) .mobile-pause-button{display:none!important}
