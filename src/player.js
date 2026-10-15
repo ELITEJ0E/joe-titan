@@ -11,6 +11,7 @@ import {updateStableFirstPersonCamera} from './odm-first-person-camera.js';
 import {MOBILE_ASSIST,mobileHookAssistance,ackermanPilotScale} from './mobile-flight-controls.js';
 import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
+import {createFirstPersonSwords,animateFirstPersonSwords,swordMotion} from './scout-sword-visuals.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 
@@ -153,6 +154,7 @@ export function createScoutAvatarModel(scene,{remote=false}={}){
 }
 export function createPlayer(scene,world,camera){
   const model=avatar(scene);
+  const fpsWeapons=createFirstPersonSwords(camera);
   const form=new THREE.Group();const formMat=new THREE.MeshBasicMaterial({color:0x82e8ff,transparent:true,opacity:.18,depthWrite:false,blending:THREE.AdditiveBlending});
   const formBody=new THREE.Mesh(new THREE.CapsuleGeometry(.72,2.1,5,10),formMat);formBody.position.y=1.75;form.add(formBody);
   const formCore=new THREE.Mesh(new THREE.SphereGeometry(.34,12,8),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.88}));formCore.position.y=2.7;form.add(formCore);form.visible=false;scene.add(form);
@@ -193,6 +195,7 @@ export function createPlayer(scene,world,camera){
     state.flightClock=0;state.lastGearAt=-Infinity;state.lastImpactAt=-Infinity;state.impactFeedback=0;
     state.landingCompression=0;state.braking=false;state.hitStun=0;model.tilt.position.y=0;
     resetScoutAttack(state.combat);
+    fpsWeapons.group.visible=false;
     release(0);release(1);model.root.position.copy(state.position);model.root.rotation.set(0,0,0);model.tilt.rotation.set(0,0,0);
     cameraAim.copy(state.position).add(V(0,.9,0));
     camera.position.copy(state.position).add(V(1.15,3.86,11.57));updateCamera(1,true);
@@ -354,10 +357,16 @@ export function createPlayer(scene,world,camera){
       smoothBone(model.legs[i],legAngle,0,side*(flying?.12:0),dt,16);
       smoothBone(model.knees[i],flying?.28+clamp(-legAngle,0,.23):Math.max(0,legWalk)*.19+state.landingCompression,0,0,dt,14);
       const reach=state.hooks[i]?-.92:(flying?state.braking?.2:-.6:-side*walk*.36);
-      const slashArc=slash*(i===0?-.6:.78)+(spinning?(i===0?-.9:.9):0);
+      const motion=swordMotion(action,side);
+      const slashArc=motion.swing*(i===0?-.95:1.02)+(spinning?(i===0?-1.15:1.15):0);
       if(state.hooks[i]&&action.kind==='idle')aimODMArm(model.arms[i],state.hooks[i].point,dt);
-      else smoothBone(model.arms[i],reach+slashArc,side*slash*.22+(spinning?side*.20:0),side*(spinning?.55:state.hitStun>0?.39:.09),dt,action.phase==='strike'?45:18);
-      smoothBone(model.elbows[i],state.hooks[i]?-.25:flying?-.32:-.14,0,side*slash*.18,dt,17);
+      else smoothBone(model.arms[i],reach+slashArc,
+        side*motion.swing*.42+(spinning?side*.30:0),
+        side*(spinning?.78:state.hitStun>0?.39:.09)+motion.twist,
+        dt,action.phase==='strike'?55:18);
+      smoothBone(model.elbows[i],state.hooks[i]?-.25:flying?-.32:-.14+
+        (action.kind!=='idle'?-.32*Math.abs(motion.swing):0),0,
+        side*motion.swing*.29,dt,action.phase==='strike'?45:17);
       model.blades[i].visible=state.blades>0||state.attackTimer>0;
     }
     smoothBone(model.headRig,flying?-.1:0,clamp(state.bank*.24,-.16,.16),-state.bank*.23,dt,12);
@@ -432,6 +441,8 @@ export function createPlayer(scene,world,camera){
       // Keep third-person look smoothing initialized for a clean view toggle.
       cameraAim.copy(camera.position).add(dir);
       model.root.visible=false;
+      animateFirstPersonSwords(fpsWeapons,state.combat,dt,state.flightClock,
+        {blades:state.blades,visible:true});
       return;
     }
 
@@ -471,9 +482,10 @@ export function createPlayer(scene,world,camera){
       camera.fov=nextFov;camera.updateProjectionMatrix();
     }
     model.root.visible=true;
+    fpsWeapons.group.visible=false;
   }
   reset();
-  return {...state,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,spin,consumeAttackHit,viewDirection,get combat(){return state.combat;},get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){
+  return {...state,fpsWeapons,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,spin,consumeAttackHit,viewDirection,get combat(){return state.combat;},get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){
     const next=!!v;
     if(state.firstPerson===next)return;
     state.firstPerson=next;
