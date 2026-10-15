@@ -12,6 +12,7 @@ import {MOBILE_ASSIST,mobileHookAssistance,ackermanPilotScale} from './mobile-fl
 import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 import {createFirstPersonSwords,animateFirstPersonSwords,swordMotion} from './scout-sword-visuals.js';
+import {moveFacingYaw,orbitCameraPose,smoothFacingYaw} from './free-orbit-camera.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 
@@ -319,10 +320,14 @@ export function createPlayer(scene,world,camera){
     state.distance+=state.position.distanceTo(prev);
     // Banking and sprint cycles animate the procedural player without borrowed character assets.
     const flatSpeed=Math.hypot(state.velocity.x,state.velocity.z);
-    let desiredYaw=state.yaw;
-    if(flatSpeed>3){desiredYaw=Math.atan2(-state.velocity.x,-state.velocity.z);}
-    let yawDelta=((desiredYaw-model.root.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
-    model.root.rotation.y+=yawDelta*(1-Math.exp(-dt*8));
+    // Looking around does not rotate the character. Only deliberate
+    // movement changes its heading, MMORPG-style. The camera remains free.
+    const x=Number(input.keys.has('KeyD'))-Number(input.keys.has('KeyA'));
+    const z=Number(input.keys.has('KeyW'))-Number(input.keys.has('KeyS'));
+    const desiredYaw=moveFacingYaw(state.yaw,x,z,{
+      previousYaw:model.root.rotation.y,moving:Math.hypot(x,z)>.1
+    });
+    model.root.rotation.y=smoothFacingYaw(model.root.rotation.y,desiredYaw,dt,11);
     model.root.position.copy(state.position);
     const pose=pilotPoseTargets({
       velocity:state.velocity,position:state.position,forward,right,
@@ -448,9 +453,13 @@ export function createPlayer(scene,world,camera){
       return;
     }
 
-    const aim=state.position.clone().add(V(0,.9,0));
-    const shoulder=V(Math.cos(state.yaw)*1.15,0,-Math.sin(state.yaw)*1.15);
-    const desired=aim.clone().addScaledVector(dir,-11.6).add(V(0,2.15,0)).add(shoulder);
+    // Free-orbit chase camera focuses on the actual scout, even when
+    // looking at their face. Character orientation is independent.
+    const pose=orbitCameraPose(state.position,state.yaw,state.pitch,{
+      distance:11.6,height:1.65,elevation:1.1
+    });
+    const aim=pose.focus;
+    const desired=pose.ideal;
     let obstructed=false;
     const delta=desired.clone().sub(aim),dist=delta.length();
     const hit=world.grappleRay(aim,delta.clone().normalize(),dist);
@@ -467,7 +476,7 @@ export function createPlayer(scene,world,camera){
       camera.position.y+=flightLift*(1-Math.exp(-dt*4));
     }
     camera.position.y=Math.max(.35,camera.position.y);
-    const lookPoint=aim.clone().addScaledVector(dir,6.5);
+    const lookPoint=aim;
     cameraAim.lerp(lookPoint,snap?1:1-Math.exp(-dt*11));
     camera.up.set(0,1,0);
     camera.lookAt(cameraAim);
