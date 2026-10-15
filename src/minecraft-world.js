@@ -178,6 +178,58 @@ export async function loadMinecraftWorld(scene,url='/maps/shiganshina.jtvx'){
   const visuals=createShiganshinaVisuals(scene,asset.colors,'performance');
   const sectors=createSectors(scene,asset,visuals.material,visuals.waterMaterial);
   installVoxelPhysics(world,asset);
+  // Destruction edits the actual voxel occupancy used by roof/collision/ray
+  // queries, paired with persistent GPU blast cutouts. The original greedy
+  // quads are not regenerated: cut edges are intentionally faceless until a
+  // later incremental remeshing pass.
+  const changed=new Map(),volumes=[],initialAnchors=[...world.anchors],
+    initialColliders=[...world.colliders];
+  const uniformBlasts=visuals.material.uniforms.uBlastVolumes.value;
+  world.damageStructures=(center,radius,{height=0}={})=>{
+    if(!center||!Number.isFinite(radius)||radius<=0||volumes.length>=24)
+      return {pieces:0,colliders:0,limited:volumes.length>=24};
+    const r=Math.min(55,radius),cx=center.x,cy=center.y+height*.5,cz=center.z;
+    let pieces=0;
+    const x0=Math.max(0,Math.floor(cx-r-ORIGIN.x)),x1=Math.min(asset.nx-1,Math.ceil(cx+r-ORIGIN.x));
+    const y0=Math.max(0,Math.floor(Math.max(10,cy-r)-ORIGIN.y)),y1=Math.min(asset.ny-1,Math.ceil(cy+r-ORIGIN.y));
+    const z0=Math.max(0,Math.floor(cz-r-ORIGIN.z)),z1=Math.min(asset.nz-1,Math.ceil(cz+r-ORIGIN.z));
+    const r2=r*r;
+    for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){
+      const dx=x+ORIGIN.x+.5-cx,dz=z+ORIGIN.z+.5-cz;
+      if(dx*dx+dz*dz>=r2)continue;
+      for(let y=y0;y<=y1;y++){
+        const dy=y+ORIGIN.y+.5-cy;
+        if(dx*dx+dy*dy+dz*dz>r2||y+ORIGIN.y+.5<=10)continue;
+        const id=(x*asset.ny+y)*asset.nz+z,value=asset.voxel[id];
+        if(NON_SOLID.has(value))continue;
+        if(!changed.has(id))changed.set(id,value);
+        asset.voxel[id]=0;pieces++;
+      }
+    }
+    if(!pieces)return {pieces:0,colliders:0};
+    const radius2D=r+3;
+    let removed=0;
+    for(let i=world.colliders.length-1;i>=0;i--){
+      const b=world.colliders[i],dx=Math.max(Math.abs(b.x-cx)-b.halfW,0),
+        dz=Math.max(Math.abs(b.z-cz)-b.halfD,0);
+      if(dx*dx+dz*dz<radius2D*radius2D){
+        world.colliders.splice(i,1);removed++;
+      }
+    }
+    world.anchors=world.anchors.filter(a=>a.distanceToSquared(V(cx,cy,cz))>(r+3)*(r+3));
+    const id=volumes.length;
+    volumes.push([cx,cy,cz,r]);
+    uniformBlasts[id].set(cx,cy,cz,r);
+    visuals.material.uniforms.uBlastCount.value=volumes.length;
+    return {pieces,colliders:removed};
+  };
+  world.resetDestruction=()=>{
+    for(const [id,value] of changed)asset.voxel[id]=value;
+    changed.clear();volumes.length=0;
+    visuals.material.uniforms.uBlastCount.value=0;
+    world.anchors=[...initialAnchors];
+    world.colliders.splice(0,world.colliders.length,...initialColliders);
+  };
   // The former fixed (-30,19,29) point was inside authored masonry.
   // Choose a genuinely outdoor, clear-headed street using the loaded voxels.
   const safeSpawn=findSafeMinecraftSpawn(asset,ORIGIN);

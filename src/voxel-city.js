@@ -252,9 +252,16 @@ export function createVoxelWorld(scene){
   // Vast crenellated perimeter, corner keeps and watchtowers. Gated gaps at
   // the cardinal approaches make the walls useful for movement and navigation.
   function wallSegment(x,z,w,d,h){
-    block('stone',x,h/2,z,w,h,d);block('stoneDark',x,h-.65,z,w+.6,1.3,d+.6);
-    obstacle(x,z,w,d,h);
-    const alongX=w>d;
+    // Divide the curtain wall into individually destructible spans instead
+    // of making a single 160-metre object vanish on a local Titan impact.
+    const alongX=w>d,span=alongX?w:d,sections=Math.ceil(span/12);
+    for(let i=0;i<sections;i++){
+      const length=span/sections,offset=-span/2+(i+.5)*length;
+      const bx=x+(alongX?offset:0),bz=z+(alongX?0:offset);
+      block('stone',bx,h/2,bz,alongX?length:w,h,alongX?d:length);
+      block('stoneDark',bx,h-.65,bz,alongX?length+.1:w+.1,1.3,alongX?d+.1:length+.1);
+      obstacle(bx,bz,alongX?length:w,alongX?d:length,h);
+    }
     for(let t=-(alongX?w:d)/2+2;t<(alongX?w:d)/2;t+=5){
       const cx=x+(alongX?t:0),cz=z+(alongX?0:t);
       block('limestone',cx,h+1.55,cz,alongX?2.8:w,3.1,alongX?d:2.8);
@@ -368,6 +375,7 @@ export function createVoxelWorld(scene){
   // Batch by both shared voxel material and spatial chunk for frustum culling.
   const unit=new THREE.BoxGeometry(1,1,1),dummy=new THREE.Object3D();
   let voxelCount=0,drawMeshes=0;
+  const destructibleMeshes=[];
   for(const group of collections.values()){
     if(!group.boxes.length)continue;
     const mesh=new THREE.InstancedMesh(unit,palette[group.kind],group.boxes.length);
@@ -382,12 +390,71 @@ export function createVoxelWorld(scene){
     mesh.computeBoundingSphere();
     mesh.computeBoundingBox();
     scene.add(mesh);drawMeshes++;voxelCount+=group.boxes.length;
+    if(!['road','roadLight','water','grass','leaves','leavesLight','glow'].includes(group.kind)){
+      destructibleMeshes.push({mesh,boxes:group.boxes,removed:new Set()});
+    }
   }
   // Precompute AABBs once. Camera checks can run each frame, so they must not
   // allocate hundreds of temporary boxes per ray.
   const collisionBoxes=collidable.map(c=>new THREE.Box3(
     V(c.x-c.halfW,0,c.z-c.halfD),V(c.x+c.halfW,c.h,c.z+c.halfD)));
   const ray=new THREE.Ray(),nearPoint=V(0,0,0);
+  const originalColliders=[...world.colliders],originalAnchors=[...world.anchors];
+  const zeroMatrix=new THREE.Matrix4().makeScale(0,0,0),savedMatrix=new THREE.Matrix4();
+  const originalMatrices=new Map();
+  const boxDistance=(x,y,z,w,h,d,p)=>{
+    const dx=Math.max(Math.abs(p.x-x)-w*.5,0);
+    const dy=Math.max(Math.abs(p.y-y)-h*.5,0);
+    const dz=Math.max(Math.abs(p.z-z)-d*.5,0);
+    return Math.hypot(dx,dy,dz);
+  };
+  world.damageStructures=(center,radius,{height=0}={})=>{
+    if(!center||!Number.isFinite(radius)||radius<=0)return {pieces:0,colliders:0};
+    const c=V(center.x,center.y+height*.5,center.z),r=Math.min(68,radius);
+    let pieces=0,colliders=0;
+    for(const entry of destructibleMeshes){
+      for(let i=0;i<entry.boxes.length;i++){
+        if(entry.removed.has(i))continue;
+        const [x,y,z,w,h,d]=entry.boxes[i];
+        if(y+h*.5<1.25||boxDistance(x,y,z,w,h,d,c)>r)continue;
+        const key=entry.mesh.uuid+':'+i;
+        entry.mesh.getMatrixAt(i,savedMatrix);
+        originalMatrices.set(key,savedMatrix.clone());
+        entry.mesh.setMatrixAt(i,zeroMatrix);
+        entry.removed.add(i);pieces++;
+      }
+      if(entry.removed.size)entry.mesh.instanceMatrix.needsUpdate=true;
+    }
+    for(let i=world.colliders.length-1;i>=0;i--){
+      const b=world.colliders[i];
+      if(boxDistance(b.x,b.h*.5,b.z,b.halfW*2,b.h,b.halfD*2,c)<=r){
+        world.colliders.splice(i,1);colliders++;
+      }
+    }
+    if(colliders){
+      collisionBoxes.length=0;
+      for(const b of world.colliders)collisionBoxes.push(new THREE.Box3(
+        V(b.x-b.halfW,0,b.z-b.halfD),V(b.x+b.halfW,b.h,b.z+b.halfD)));
+      world.anchors=world.anchors.filter(a=>a.distanceTo(c)>r+3);
+    }
+    return {pieces,colliders};
+  };
+  world.resetDestruction=()=>{
+    for(const entry of destructibleMeshes){
+      for(const i of entry.removed){
+        const key=entry.mesh.uuid+':'+i,original=originalMatrices.get(key);
+        if(original)entry.mesh.setMatrixAt(i,original);
+      }
+      if(entry.removed.size)entry.mesh.instanceMatrix.needsUpdate=true;
+      entry.removed.clear();
+    }
+    originalMatrices.clear();
+    world.colliders.splice(0,world.colliders.length,...originalColliders);
+    world.anchors=[...originalAnchors];
+    collisionBoxes.length=0;
+    for(const b of world.colliders)collisionBoxes.push(new THREE.Box3(
+      V(b.x-b.halfW,0,b.z-b.halfD),V(b.x+b.halfW,b.h,b.z+b.halfD)));
+  };
   world.grappleRay=(origin,dir,maxDist=125)=>{
     ray.set(origin,dir.clone().normalize());
     let best=null,closest=maxDist;

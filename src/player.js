@@ -13,6 +13,7 @@ import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escap
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 import {createFirstPersonSwords,animateFirstPersonSwords,swordMotion} from './scout-sword-visuals.js';
 import {moveFacingYaw,orbitCameraPose,smoothFacingYaw} from './free-orbit-camera.js';
+import {changeOrbitZoom} from './titan-camera-jump.js';
 
 const DEPLOYMENT_POINT = new THREE.Vector3(34, 1, 31);
 
@@ -165,7 +166,7 @@ export function createPlayer(scene,world,camera){
   const state={position:V(8,1,-10),velocity:V(0,0,0),yaw:0,pitch:-.07,gas:100,health:100,blades:8,grabbed:false,grabEscape:0,grabProgress:createEscapeProgress(),grounded:true,
     hooks:[null,null],distance:0, boost:false, speed:0, bank:0,recoveries:0,attackTimer:0,aspect:null,world, camera,model,form,formMat,formCore,firstPerson:false,
     flightClock:0,lastGearAt:-Infinity,lastImpactAt:-Infinity,impactFeedback:0,combat:createScoutAttackState(),
-    landingCompression:0,braking:false,hitStun:0};
+    landingCompression:0,braking:false,hitStun:0,orbitDistance:11.6};
   camera.position.set(9,5,3);
   const heading=()=>V(-Math.sin(state.yaw),0,-Math.cos(state.yaw));
   const viewDirection=()=>V(-Math.sin(state.yaw)*Math.cos(state.pitch),Math.sin(state.pitch),-Math.cos(state.yaw)*Math.cos(state.pitch));
@@ -190,6 +191,11 @@ export function createPlayer(scene,world,camera){
     // letting the walking controller pin the gear to the floor.
     // Reference hooks do not give a free vertical launch from the ground.
     return true;
+  }
+  function adjustZoom(delta){
+    if(state.firstPerson)return state.orbitDistance;
+    state.orbitDistance=changeOrbitZoom(state.orbitDistance,delta,{min:2.7,max:25});
+    return state.orbitDistance;
   }
   function release(index){state.hooks[index]=null;model.ropeLines[index].visible=false;model.tips[index].visible=false;}
   function reset(){
@@ -456,7 +462,7 @@ export function createPlayer(scene,world,camera){
     // Free-orbit chase camera focuses on the actual scout, even when
     // looking at their face. Character orientation is independent.
     const pose=orbitCameraPose(state.position,state.yaw,state.pitch,{
-      distance:11.6,height:1.65,elevation:1.1
+      distance:state.orbitDistance,height:1.65,elevation:Math.min(1.1,state.orbitDistance*.14)
     });
     const aim=pose.focus;
     const desired=pose.ideal;
@@ -496,7 +502,7 @@ export function createPlayer(scene,world,camera){
     fpsWeapons.group.visible=false;
   }
   reset();
-  return {...state,fpsWeapons,update,updateCamera,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,spin,consumeAttackHit,viewDirection,get combat(){return state.combat;},get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){
+  return {...state,fpsWeapons,update,updateCamera,adjustZoom,target,fire,release,reset,setAspect,clearAspect,takeDamage,heal,refillGas,refillBlades,grab,escapeGrab,attack,spin,consumeAttackHit,viewDirection,get combat(){return state.combat;},get recoveries(){return state.recoveries;},get position(){return state.position;},get velocity(){return state.velocity;},get gas(){return state.gas;},get health(){return state.health;},get blades(){return state.blades;},get grabbed(){return state.grabbed;},get aspect(){return state.aspect;},get speed(){return state.speed;},get hooks(){return state.hooks;},get grounded(){return state.grounded;},get boost(){return state.boost;},get yaw(){return state.yaw;},set yaw(v){state.yaw=v;},get pitch(){return state.pitch;},set pitch(v){state.pitch=clamp(v,-1.12,.88);},get firstPerson(){return state.firstPerson;},set firstPerson(v){
     const next=!!v;
     if(state.firstPerson===next)return;
     state.firstPerson=next;
