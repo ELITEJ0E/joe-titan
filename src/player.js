@@ -8,7 +8,7 @@ import {pilotPoseTargets} from './odm-pose.js';
 import {ODM_CABLE_SEGMENTS,writeODMCableCurve} from './odm-cable-visuals.js';
 import {aimODMArm} from './odm-arm-aim.js';
 import {updateStableFirstPersonCamera} from './odm-first-person-camera.js';
-import {MOBILE_ASSIST,mobileHookAssistance} from './mobile-flight-controls.js';
+import {MOBILE_ASSIST,mobileHookAssistance,ackermanPilotScale} from './mobile-flight-controls.js';
 import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
@@ -205,6 +205,12 @@ export function createPlayer(scene,world,camera){
   }
   function update(dt,input,time){
     if(!ensureValid()){input.jumpQueued=false;return;}
+    // Ackerman: unhooked flight is slow and precise; cable-assisted motion
+    // remains full-speed. Wall collision remains resolved at every substep.
+    const ackermanActive=state.aspect?.effect==='ackerman';
+    const hooked=state.hooks.some(Boolean);
+    const pilotScale=ackermanPilotScale({active:ackermanActive,hooked});
+    dt*=pilotScale;
     if(state.grabbed){
       state.velocity.set(0,0,0);state.speed=0;state.boost=false;
       for(let i=0;i<2;i++){
@@ -275,7 +281,10 @@ export function createPlayer(scene,world,camera){
     for(const hook of state.hooks)if(hook)hook.age+=dt;
     state.velocity.y-=ODM_TUNING.gravity*(state.aspect?.gravityScale||1)*dt;
     if(!state.grounded)applyReferenceAirDrag(state.velocity,dt);
-    if(state.velocity.length()>ODM_TUNING.maxSpeed*(state.aspect?.speed||1))state.velocity.multiplyScalar(ODM_TUNING.maxSpeed*(state.aspect?.speed||1)/state.velocity.length());
+    // In free flight do not let previously accumulated high-speed velocity
+    // negate the slow-time navigation assistance.
+    const cap=ODM_TUNING.maxSpeed*(state.aspect?.speed||1);
+    if(state.velocity.length()>cap)state.velocity.multiplyScalar(cap/state.velocity.length());
     // Reference-style ropes do not pay out during boost. A taut rope
     // removes outward radial speed, preserving tangent/look-directed motion.
     state.position.addScaledVector(state.velocity,dt);
