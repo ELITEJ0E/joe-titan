@@ -35,7 +35,6 @@ test('Ackerman Mode is the single selectable ability, with exactly seven real se
 test('Ackerman Mode slows gravity while leaving flight velocity physical',()=>{
   const a=createPlayer(new THREE.Scene(),world(),new THREE.PerspectiveCamera());
   const b=createPlayer(new THREE.Scene(),world(),new THREE.PerspectiveCamera());
-  a.grounded=false;b.grounded=false;
   a.position.y=15;b.position.y=15;
   a.velocity.set(0,0,0);b.velocity.set(0,0,0);
   a.setAspect(ACKERMAN_MODE);
@@ -52,7 +51,6 @@ test('mobile hooks auto reel and engage reduced-cost propulsion; PC hooks remain
   const mobile=createPlayer(new THREE.Scene(),world(),new THREE.PerspectiveCamera());
   const desktop=createPlayer(new THREE.Scene(),world(),new THREE.PerspectiveCamera());
   for(const p of [mobile,desktop]){
-    p.grounded=true;
     p.position.set(0,1,0);
     p.hooks[0]={point:V(0,28,-52),length:60,age:0};
   }
