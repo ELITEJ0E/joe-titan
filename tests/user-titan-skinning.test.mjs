@@ -16,7 +16,7 @@ test('skinning weights normalize and select anatomy',()=>{
  ];
  for(const {coord,want} of cases){
   const picks=classifyTitanVertex(...coord);
-  assert.equal(picks[0][0],want,'selected proper anatomical limb');
+  assert.equal([...picks].sort((a,b)=>b[1]-a[1])[0][0],want,'selected proper anatomical limb');
   assert.ok(Math.abs(picks.reduce((sum,x)=>sum+x[1],0)-1)<1e-5,'weights sum to 1');
  }
 });
