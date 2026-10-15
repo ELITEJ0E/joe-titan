@@ -1,89 +1,150 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 
-// These are the character mesh assets, not NPC hitboxes or animation rigs.
-// They are static GLBs with embedded base-color, roughness/metalness and normal maps.
-export const TITAN_GLB_PATHS = Object.freeze({
-  attack: '/models/titans/attack_titan.glb',
-  armored: '/models/titans/armored_titan.glb',
-  colossal: '/models/titans/colossal_titan.glb',
-  female: '/models/titans/female_titan.glb',
-  beast: '/models/titans/beast_titan.glb',
-  jaw: '/models/titans/jaw_titan.glb',
-  cart: '/models/titans/cart_titan.glb',
-  warhammer: '/models/titans/war_hammer_titan.glb',
-  founding: '/models/titans/founding_titan.glb'
+// Uploaded user meshes are unrigged and have no source animations.
+// Build a lightweight per-vertex skeletal skin, then animate it at runtime.
+export const TITAN_GLB_PATHS=Object.freeze({
+ attack:'/models/titans/attack_titan.glb',
+ armored:'/models/titans/armored_titan.glb',
+ colossal:'/models/titans/colossal_titan.glb',
+ female:'/models/titans/female_titan.glb',
+ beast:'/models/titans/beast_titan.glb',
+ jaw:'/models/titans/jaw_titan.glb',
+ cart:'/models/titans/cart_titan.glb',
+ warhammer:'/models/titans/war_hammer_titan.glb',
+ founding:'/models/titans/founding_titan.glb'
 });
-
-const modelLoader = new GLTFLoader();
-const cache = new Map();
-const ALIGN_Z_UP_FRONT_NEG_Y = new THREE.Matrix4().set(
-  -1, 0, 0, 0,
-   0, 0, 1, 0,
-   0, 1, 0, 0,
-   0, 0, 0, 1
-);
-
-function getModel(kind) {
-  if (!TITAN_GLB_PATHS[kind]) return Promise.reject(new Error('Unknown Titan: '+kind));
-  if (!cache.has(kind)) {
-    cache.set(kind, modelLoader.loadAsync(TITAN_GLB_PATHS[kind]).catch(error => {
-      // A missing or interrupted download should be retried next time.
-      cache.delete(kind);
-      throw error;
-    }));
+const loader=new GLTFLoader(),cache=new Map(),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function load(kind){
+ if(!cache.has(kind))cache.set(kind,loader.loadAsync(TITAN_GLB_PATHS[kind]).catch(e=>{cache.delete(kind);throw e;}));
+ return cache.get(kind);
+}
+function bone(name,x,y,z,parent){
+ const b=new THREE.Bone();b.name=name;b.position.set(x,y,z);parent.add(b);return b;
+}
+export function classifyTitanVertex(x,y,z){
+ // Original Meshy model normalized to y=0..1, front toward negative Z.
+ // Weight spread smooths deformation around knees/elbows/hips/shoulders.
+ if(y>.83&&Math.abs(x)<.21)return [[6,1]];
+ if(y>.54&&Math.abs(x)<.23)return [[1,1]];
+ if(y>.53&&Math.abs(x)>.23){
+   const left=x<0,upper=y>.63;
+   const shoulder=left?2:4,elbow=left?3:5;
+   const bend=clamp((.64-y)/.13,0,1);
+   return [[shoulder,1-bend],[elbow,bend]];
+ }
+ if(y<=.54){
+   const left=x<0,upper=y>.30;
+   const hip=left?7:9,knee=left?8:10;
+   const bend=clamp((.38-y)/.14,0,1);
+   return [[hip,1-bend],[knee,bend]];
+ }
+ return [[1,1]];
+}
+function makeBones(root){
+ const hips=bone('Hips',0,.53,0,root);
+ const torso=bone('Spine',0,.08,0,hips);
+ const leftArm=bone('LeftUpperArm',-.22,.19,0,torso);
+ const leftFore=bone('LeftForeArm',-.12,-.14,0,leftArm);
+ const rightArm=bone('RightUpperArm',.22,.19,0,torso);
+ const rightFore=bone('RightForeArm',.12,-.14,0,rightArm);
+ const head=bone('Head',0,.30,0,torso);
+ const leftLeg=bone('LeftUpperLeg',-.10,-.08,0,hips);
+ const leftShin=bone('LeftLowerLeg',0,-.22,0,leftLeg);
+ const rightLeg=bone('RightUpperLeg',.10,-.08,0,hips);
+ const rightShin=bone('RightLowerLeg',0,-.22,0,rightLeg);
+ return {bones:[hips,torso,leftArm,leftFore,rightArm,rightFore,head,leftLeg,leftShin,rightLeg,rightShin],
+  hips,torso,leftArm,leftFore,rightArm,rightFore,head,leftLeg,leftShin,rightLeg,rightShin};
+}
+function skinnedVisual(gltf,kind){
+ const pivot=new THREE.Group();
+ pivot.name='User GLB skinned / '+kind;
+ const scene=gltf.scene;
+ scene.updateMatrixWorld(true);
+ const bbox=new THREE.Box3().setFromObject(scene);
+ const dims=bbox.getSize(new THREE.Vector3());
+ if(!Number.isFinite(dims.y)||dims.y<=.01)throw Error('Invalid mesh size');
+ const c=bbox.getCenter(new THREE.Vector3()),factor=1/dims.y;
+ // Transform world-space vertices into shared normalized rig coordinates.
+ const norm=new THREE.Matrix4().makeScale(factor,factor,factor)
+    .multiply(new THREE.Matrix4().makeTranslation(-c.x,-bbox.min.y,-c.z));
+ const bones=makeBones(pivot);
+ pivot.updateMatrixWorld(true);
+ const skeleton=new THREE.Skeleton(bones.bones);
+ scene.traverse(obj=>{
+  if(!obj.isMesh)return;
+  const geo=obj.geometry.clone();
+  geo.applyMatrix4(norm.clone().multiply(obj.matrixWorld));
+  if(!geo.attributes.normal)geo.computeVertexNormals();
+  const pos=geo.attributes.position,si=new Uint16Array(pos.count*4),sw=new Float32Array(pos.count*4);
+  for(let i=0;i<pos.count;i++){
+    const picks=classifyTitanVertex(pos.getX(i),pos.getY(i),pos.getZ(i));
+    for(let k=0;k<picks.length;k++){si[i*4+k]=picks[k][0];sw[i*4+k]=picks[k][1];}
   }
-  return cache.get(kind);
-}
-
-// Preserve the existing rig and its collision/gameplay markers as a fallback.
-// A GLB becomes the visible skin only after it has finished loading.
-export function attachTitanGLB(rig, kind) {
-  if (typeof document === 'undefined' || typeof window === 'undefined' || !TITAN_GLB_PATHS[kind]) return rig;
-  rig.modelStatus = 'loading';
-  rig.modelReady = getModel(kind).then(gltf => {
-    if (rig.disposed) return false;
-    const oldMeshes = [];
-    rig.group.traverse(node => {
-      if (node.isMesh && node.geometry?.type !== 'CircleGeometry') oldMeshes.push(node);
+  geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));
+  geo.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
+  const baseMaterials=Array.isArray(obj.material)?obj.material:[obj.material];
+  const mats=baseMaterials.map(m=>{
+    const material=new THREE.MeshStandardMaterial({
+      color:0xffffff,vertexColors:!!geo.attributes.color,roughness:.88,
+      flatShading:false,side:THREE.DoubleSide
     });
-    const display = new THREE.Group();
-    display.name = 'GLB visual / ' + kind;
-    const aligned = new THREE.Group();
-    aligned.quaternion.setFromRotationMatrix(ALIGN_Z_UP_FRONT_NEG_Y);
-    const asset = gltf.scene.clone(true);
-    aligned.add(asset);
-    display.add(aligned);
-    display.updateMatrixWorld(true);
-    const bounds = new THREE.Box3().setFromObject(aligned);
-    const dims = bounds.getSize(new THREE.Vector3());
-    if (!Number.isFinite(dims.y) || dims.y <= 0) throw new Error('Invalid Titan model bounds: ' + kind);
-    // The old rig uses normalized height=1; parent scale applies metres.
-    const factor = 1 / dims.y;
-    const center = bounds.getCenter(new THREE.Vector3());
-    aligned.scale.setScalar(factor);
-    aligned.position.set(-center.x*factor, -bounds.min.y*factor, -center.z*factor);
-    display.traverse(node => {
-      if (node.isMesh) {
-        node.castShadow = true;
-        node.receiveShadow = true;
-        node.frustumCulled = false;
-      }
-    });
-    rig.group.add(display);
-    oldMeshes.forEach(mesh => {mesh.visible=false;});
-    rig.modelVisual = display;
-    rig.modelStatus = 'loaded';
-    return true;
-  }).catch(error => {
-    rig.modelStatus = 'fallback';
-    if (!rig.disposed) console.warn('GLB Titan visual unavailable, using procedural rig:', kind, error);
-    return false;
+    if(m.map)material.map=m.map;
+    if(!geo.attributes.color&&!material.map)material.color.setHex(0xb18a78);
+    return material;
   });
-  return rig;
+  const skin=new THREE.SkinnedMesh(geo,mats.length===1?mats[0]:mats);
+  skin.name='Animated Mesh / '+kind;
+  skin.castShadow=true;skin.receiveShadow=true;skin.frustumCulled=false;
+  pivot.add(skin);
+  skin.bind(skeleton);
+ });
+ if(!pivot.children.some(c=>c.isSkinnedMesh))throw Error('No skinnable meshes in GLB');
+ return {pivot,bones,skeleton};
 }
-
-export function preloadTitanGLBs(kinds=Object.keys(TITAN_GLB_PATHS)) {
-  if (typeof window === 'undefined') return Promise.resolve([]);
-  return Promise.allSettled(kinds.map(getModel));
+export function animateTitanGLB(rig,enemy,dt,time){
+ if(!rig.modelSkeleton)return;
+ const b=rig.modelSkeleton.bones,move=clamp(enemy.moving||0,0,1),
+ gait=rig.gait,walk=Math.sin(gait)*.39*move,atk=enemy.attackPhase||'idle',
+ swing=atk==='strike'?.95:atk==='windup'?-.65:atk==='lunge'?.4:0;
+ const k=1-Math.exp(-Math.max(0,dt)*12);
+ const pose=(node,x,y=0,z=0)=>{node.rotation.x=THREE.MathUtils.lerp(node.rotation.x,x,k);
+  node.rotation.y=THREE.MathUtils.lerp(node.rotation.y,y,k);
+  node.rotation.z=THREE.MathUtils.lerp(node.rotation.z,z,k);};
+ pose(b.torso,Math.sin(time*1.2)*.014+(atk==='lunge'?-.23:0),0,walk*.13);
+ pose(b.leftArm,-walk*.55-.12,0,-.11);
+ pose(b.rightArm,walk*.55+swing-.12,0,.11);
+ pose(b.leftFore,-.20-Math.max(0,swing)*.4);
+ pose(b.rightFore,-.20-Math.max(0,swing)*.65);
+ pose(b.head,Math.sin(time*.68)*.025);
+ pose(b.leftLeg,-walk);
+ pose(b.rightLeg,walk);
+ pose(b.leftShin,Math.max(0,walk)*.55);
+ pose(b.rightShin,Math.max(0,-walk)*.55);
+ b.hips.position.y=.53+Math.abs(Math.sin(gait))*.007*move;
+ rig.modelVisual.position.y=Math.sin(time*1.3)*.003;
+}
+export function attachTitanGLB(rig,kind){
+ if(typeof window==='undefined'||!TITAN_GLB_PATHS[kind])return rig;
+ rig.modelStatus='loading';
+ rig.modelReady=load(kind).then(gltf=>{
+  if(rig.disposed)return false;
+  const skinned=skinnedVisual(gltf,kind);
+  // Prevent the old blocky meshes from displaying behind the actual character.
+  rig.group.traverse(obj=>{if(obj.isMesh&&obj.geometry?.type!=='CircleGeometry')obj.visible=false;});
+  rig.group.add(skinned.pivot);
+  rig.modelVisual=skinned.pivot;
+  rig.modelSkeleton=skinned;
+  rig.modelStatus='loaded';
+  return true;
+ }).catch(err=>{
+  rig.modelStatus='fallback';
+  if(!rig.disposed)console.warn('Titan GLB unavailable',kind,err);
+  return false;
+ });
+ return rig;
+}
+export function preloadTitanGLBs(kinds=Object.keys(TITAN_GLB_PATHS)){
+ if(typeof window==='undefined')return Promise.resolve([]);
+ return Promise.allSettled(kinds.map(load));
 }

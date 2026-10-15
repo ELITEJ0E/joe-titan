@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {enhanceTitanRig,TITAN_FORMS} from './titan-forms.js';
-import {attachTitanGLB} from './titan-glb-models.js';
+import {attachTitanGLB,animateTitanGLB} from './titan-glb-models.js';
 
 // Original Minecraft-style Titan rig. All dimensions are fractions of height;
 // the front faces local -Z and the nape is on the opposite (+Z) side.
@@ -167,12 +167,7 @@ export function animateVoxelTitanRig(rig,enemy,dt,time=0){
     smoothVoxelJoint(leg.hip,-sign*walk*.85+(lunge?-.17:0),0,sign*.045,dt,10);
     smoothVoxelJoint(leg.knee,Math.max(0,sign*walk)*.65+.08,0,0,dt,10);
   }
-  if(rig.modelVisual){
-    // Subtle full-body motion while these source GLBs await skeletal rigging.
-    rig.modelVisual.position.y=Math.abs(Math.sin(rig.gait))*.008*moving+breathing*.35;
-    rig.modelVisual.rotation.z=walk*.025;
-    rig.modelVisual.rotation.x=lunge?-.12:windup?.06:strike?-.09:0;
-  }
+  animateTitanGLB(rig,enemy,dt,time);
   rig.alert.visible=alerted;
   rig.alert.material.opacity=.72+.25*Math.sin(time*5)**2;
   rig.weak.material.opacity=enemy.state==='stagger'?1:.7+.26*Math.sin(time*3)**2;
