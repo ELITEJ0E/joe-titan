@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {enhanceTitanRig,TITAN_FORMS} from './titan-forms.js';
+import {attachTitanGLB} from './titan-glb-models.js';
 
 // Original Minecraft-style Titan rig. All dimensions are fractions of height;
 // the front faces local -Z and the nape is on the opposite (+Z) side.
@@ -131,6 +132,8 @@ export function createVoxelTitanRig(scene,enemy,{color=0x9b675c,height=15}={}){
   const rig={group,hips,torso,neck,head,arms,legs,weak,alert,skin,
     materials:[skin,shade,highlight,eye,mouth,gear,armor],height,flash:0,gait:0,death:0};
   if(TITAN_FORMS[enemy.type])enhanceTitanRig(rig,enemy.type);
+  // GLB visual replacement: model loads once and is cloned for every Titan.
+  if(TITAN_FORMS[enemy.type])attachTitanGLB(rig,enemy.type);
   return rig;
 }
 
@@ -164,6 +167,12 @@ export function animateVoxelTitanRig(rig,enemy,dt,time=0){
     smoothVoxelJoint(leg.hip,-sign*walk*.85+(lunge?-.17:0),0,sign*.045,dt,10);
     smoothVoxelJoint(leg.knee,Math.max(0,sign*walk)*.65+.08,0,0,dt,10);
   }
+  if(rig.modelVisual){
+    // Subtle full-body motion while these source GLBs await skeletal rigging.
+    rig.modelVisual.position.y=Math.abs(Math.sin(rig.gait))*.008*moving+breathing*.35;
+    rig.modelVisual.rotation.z=walk*.025;
+    rig.modelVisual.rotation.x=lunge?-.12:windup?.06:strike?-.09:0;
+  }
   rig.alert.visible=alerted;
   rig.alert.material.opacity=.72+.25*Math.sin(time*5)**2;
   rig.weak.material.opacity=enemy.state==='stagger'?1:.7+.26*Math.sin(time*3)**2;
@@ -189,6 +198,7 @@ export function animateVoxelTitanRig(rig,enemy,dt,time=0){
 }
 
 export function disposeVoxelTitanRig(scene,rig){
+  rig.disposed=true;
   scene.remove(rig.group);
   for(const marker of [rig.weak,rig.alert]){
     marker.material.map?.dispose();marker.material.dispose();
