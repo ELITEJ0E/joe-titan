@@ -1,47 +1,114 @@
 import * as THREE from 'three';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 
-export function createArmoredNative(gltf){
-  const root=new THREE.Group();
-  root.name='Armored Titan - animated native skeleton';
-  const model=cloneSkinned(gltf.scene);
+// Armored Titan has two real GLBs:
+// - original colored model (rest / normal movement)
+// - uploaded rigged Run_Stealth model (only when the shifter holds sprint).
+// Keep the visual swap separate from game physics and heading.
+function fitVisual(model) {
   model.updateMatrixWorld(true);
-  const bounds=new THREE.Box3().setFromObject(model);
-  const extent=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-  if(!Number.isFinite(extent.y)||extent.y<=0)throw Error('Invalid armored model bounds');
-  const scale=1/extent.y;
+  const box=new THREE.Box3().setFromObject(model);
+  const size=box.getSize(new THREE.Vector3());
+  const center=box.getCenter(new THREE.Vector3());
+  if(!Number.isFinite(size.y)||size.y<=0)throw Error('Invalid Armored Titan GLB bounds');
+  const scale=1/size.y;
+  const holder=new THREE.Group();
+  holder.add(model);
   model.scale.multiplyScalar(scale);
-  model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
-  // Model forward is +Z, while movement/camera forward is -Z.
-  root.rotation.y=Math.PI;
-  root.add(model);
+  model.position.x-=center.x*scale;
+  model.position.y-=box.min.y*scale;
+  model.position.z-=center.z*scale;
   model.traverse(node=>{
     if(!node.isMesh)return;
-    node.castShadow=true;node.receiveShadow=true;node.frustumCulled=false;
-    for(const mat of Array.isArray(node.material)?node.material:[node.material]){
-      if(!mat)continue;
-      mat.roughness=.86;
-      if(!mat.map&&!node.geometry.getAttribute('color'))mat.color.set(0xc5a17d);
-      mat.needsUpdate=true;
-    }
+    node.castShadow=true;
+    node.receiveShadow=true;
+    node.frustumCulled=false;
+    // Clone imported materials so appearance tweaks don't affect cached assets.
+    const tune=mat=>{
+      const result=mat.clone();
+      result.roughness=.86;
+      if(!result.map&&!node.geometry.getAttribute('color'))result.color.set(0xc5a17d);
+      result.needsUpdate=true;
+      return result;
+    };
+    node.material=Array.isArray(node.material)?node.material.map(tune):tune(node.material);
   });
-  const mixer=new THREE.AnimationMixer(model);
-  const clip=gltf.animations.find(c=>/run[_ -]?stealth/i.test(c.name))||gltf.animations[0];
+  return holder;
+}
+
+// Pure predicate: only a moving player holding Shift gets the native running
+// model. AI-controlled Armored Titans can still animate when chasing players.
+export function shouldUseArmoredRun(enemy) {
+  const moving=(enemy?.moving||0)>.08;
+  if(!moving)return false;
+  if(enemy.id==='human-shifter')return enemy.sprinting===true;
+  return enemy.sprinting===true||enemy.state==='pursue'||enemy.state==='lunge';
+}
+
+export function createArmoredNative(runGltf,idleGltf){
+  const root=new THREE.Group();
+  root.name='Armored Titan / dynamic idle and Shift sprint';
+  // Uploaded models look toward +Z; physics' forward is local -Z.
+  root.rotation.y=Math.PI;
+
+  const idleModel=idleGltf.scene.clone(true);
+  const idle=fitVisual(idleModel);
+  idle.name='Armored Titan / normal stance';
+  root.add(idle);
+
+  const runModel=cloneSkinned(runGltf.scene);
+  const run=fitVisual(runModel);
+  run.name='Armored Titan / native sprint';
+  run.visible=false;
+  root.add(run);
+
+  const clip=runGltf.animations.find(a=>/^Run[_ -]?Stealth$/i.test(a.name))
+    ||runGltf.animations.find(a=>/run/i.test(a.name));
+  const mixer=new THREE.AnimationMixer(runModel);
   const runAction=clip?mixer.clipAction(clip):null;
-  if(runAction){runAction.play();runAction.setEffectiveWeight(0);}
-  return {root,mixer,runAction,progress:0};
+  if(runAction){
+    runAction.reset();
+    runAction.setLoop(THREE.LoopRepeat,Infinity);
+    runAction.setEffectiveWeight(1);
+    runAction.play();
+  }
+  return {root,idle,run,mixer,runAction,running:false,progress:0};
 }
 
 export function updateArmoredNative(rig,enemy,dt){
-  const native=rig.nativeArmored;if(!native)return;
-  const movement=THREE.MathUtils.clamp(enemy.moving||0,0,1);
-  const smoothing=1-Math.exp(-Math.max(0,dt)*8);
-  native.progress=THREE.MathUtils.lerp(native.progress,movement,smoothing);
-  if(native.runAction){
-    native.runAction.setEffectiveWeight(native.progress);
-    native.runAction.setEffectiveTimeScale(THREE.MathUtils.clamp((enemy.speed||6)/8,.4,2));
+  const native=rig.nativeArmored;
+  if(!native)return;
+  const running=shouldUseArmoredRun(enemy)&&!!native.runAction;
+  if(running!==native.running){
+    native.running=running;
+    native.idle.visible=!running;
+    native.run.visible=running;
+    // Rest the running clip at its beginning for each new sprint. It cannot
+    // deform the normal standing GLB because those are independent meshes.
+    if(running){
+      native.runAction.reset();
+      native.runAction.play();
+    }
   }
-  native.mixer.update(dt);
-  const recoil=enemy.attackPhase==='strike' ?-.08:enemy.attackPhase==='windup'?.05:0;
-  native.root.rotation.x=THREE.MathUtils.lerp(native.root.rotation.x,recoil,smoothing);
+  if(running){
+    const speed=enemy.id==='human-shifter'?1:THREE.MathUtils.clamp((enemy.speed||7)/9,.65,1.4);
+    native.runAction.setEffectiveTimeScale(speed);
+    native.mixer.update(Math.max(0,dt));
+  }
+  // No full-body rotation or AnimationMixer updates to the idle model.
+  native.idle.position.y=!running?Math.sin(rig.gait*2)*.002*(enemy.moving||0):0;
+}
+
+export function disposeArmoredNative(native){
+  if(!native)return;
+  native.mixer.stopAllAction();
+  native.mixer.uncacheRoot(native.run.children[0]);
+  for(const part of [native.idle,native.run]){
+    part.traverse(node=>{
+      if(!node.isMesh)return;
+      // Geometry is cached and shared by GLTFLoader; don't dispose it here.
+      if(Array.isArray(node.material))node.material.forEach(material=>material.dispose());
+      else node.material.dispose();
+    });
+  }
 }
