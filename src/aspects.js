@@ -2,10 +2,10 @@
 // It is deliberately short and cinematic: the pilot stays responsive while
 // nearby Titans, projectiles and world animation run at a reduced time scale.
 export const ACKERMAN_MODE=Object.freeze({
-  id:'ackerman',key:'X',name:'Ackerman Mode',color:0xb4dcff,
-  duration:7,cooldown:26,effect:'ackerman',
+  id:'ackerman',key:'Q',name:'Ackerman Mode',color:0xb4dcff,
+  duration:12,cooldown:32,effect:'ackerman',
   speed:1.52,boost:1.3,reel:1.45,gravityScale:.34,
-  worldTimeScale:.27,description:'7s bullet-time ODM · fast movement · low gravity'
+  worldTimeScale:.27,description:'12s bullet-time ODM · fast movement · low gravity'
 });
 export const ASPECTS=Object.freeze([ACKERMAN_MODE]);
 

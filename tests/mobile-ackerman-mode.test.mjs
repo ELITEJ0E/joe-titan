@@ -11,16 +11,16 @@ const V=(x,y,z)=>new THREE.Vector3(x,y,z);
 const input=mobileAssist=>({keys:new Set(),jumpQueued:false,mobileAssist});
 const world=()=>({spawnPoint:V(0,1,0),grappleRay:()=>null,resolveCollision:()=>false});
 
-test('Ackerman Mode is the single selectable ability, with exactly seven real seconds',()=>{
+test('Ackerman Mode is the single selectable ability, with exactly twelve real seconds',()=>{
   assert.equal(ASPECTS.length,1);
   assert.equal(selectAspect(createAspectState(),8),ACKERMAN_MODE);
   const state=createAspectState(),trigger=activateAspect(state);
   assert.equal(trigger.ok,true);assert.equal(trigger.aspect.effect,'ackerman');
-  assert.equal(state.duration,7);
+  assert.equal(state.duration,12);
   assert.ok(ackermanWorldScale(state)<.35);
   const activatedAgain=activateAspect(state);
   assert.equal(activatedAgain.reason,'ACTIVE');
-  const almost=updateAspect(state,6.99);
+  const almost=updateAspect(state,11.99);
   assert.equal(almost.ended,false);
   assert.ok(state.duration>0);
   const end=updateAspect(state,.01);
@@ -28,7 +28,7 @@ test('Ackerman Mode is the single selectable ability, with exactly seven real se
   assert.equal(end.aspect,ACKERMAN_MODE);
   assert.equal(ackermanWorldScale(state),1);
   assert.equal(activateAspect(state).reason,'COOLDOWN');
-  updateAspect(state,26);
+  updateAspect(state,32);
   assert.equal(activateAspect(state).ok,true);
 });
 

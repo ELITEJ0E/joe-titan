@@ -21,7 +21,7 @@ test('floating joystick re-centers to finger location and caps thumb displacemen
 });
 
 test('single selectable scout skill is Ackerman, with fast hooked and slow unhooked motion',()=>{
- assert.equal(ASPECTS.length,1);assert.equal(ACKERMAN_MODE.duration,7);
+ assert.equal(ASPECTS.length,1);assert.equal(ACKERMAN_MODE.duration,12);
  assert.equal(ackermanPilotScale({active:false,hooked:false}),1);
  assert.equal(ackermanPilotScale({active:true,hooked:true}),1);
  assert.equal(ackermanPilotScale({active:true,hooked:false}),.34);

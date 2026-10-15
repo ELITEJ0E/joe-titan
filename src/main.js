@@ -199,7 +199,7 @@ function activateSelectedAspect(){
   if(aspect.effect==='pulse'||aspect.effect==='impact'){const hits=enemies.pulse(player.position,aspect.range,aspect.damage);showToast(`${aspect.name.toUpperCase()} · ${hits} RIFTBORN STAGGERED`);}
   if(aspect.effect==='decoy')enemies.setDecoy(player.position);
   if(aspect.effect==='command')enemies.suppress();
-  showToast(aspect.effect==='ackerman'?'ACKERMAN MODE · 7 SECONDS OF BULLET TIME':`${aspect.name.toUpperCase()} ASPECT ENGAGED`);
+  showToast(aspect.effect==='ackerman'?'ACKERMAN MODE · 12 SECONDS OF BULLET TIME':`${aspect.name.toUpperCase()} ASPECT ENGAGED`);
 }
 function bladeStrike(){if(titanMode){const hits=titanPlayer.attack();if(hits)showToast(`TITAN STRIKE · ${hits} TARGETS HIT`);return;}player.attack();}
 function spinStrike(){if(titanMode){activateSelectedAspect();return;}if(player.spin())showToast('SPIN CUT · COMBAT ARC');}
@@ -233,7 +233,7 @@ function savePhoto(){
   },'image/png');
 }
 function mobileKey(code,pressed){if(pressed)input.keys.add(code);else input.keys.delete(code);}
-function hookHeld(index){return index===0?(input.mouse.left||input.keys.has('KeyQ')):(input.mouse.right||input.keys.has('KeyE'));}
+function hookHeld(index){return index===0?(input.mouse.left||input.keys.has('KeyZ')):(input.mouse.right||input.keys.has('KeyE'));}
 function releaseUnheld(index){if(!titanMode&&!hookHeld(index))player?.release(index);}
 function setupTouchStick(){
   const zone=$('touchMoveZone'),stick=$('moveStick'),knob=stick?.querySelector('span');
@@ -309,11 +309,11 @@ function setupTouchButton(button){
     if(action==='attack'){if(pressed)bladeStrike();return;}
     if(action==='shoot'){if(pressed){const muzzle=player.position.clone().add(new THREE.Vector3(0,1.25,0));if(ranged?.fire(muzzle,player.viewDirection()))showToast('PISTOL · '+ranged.ammo+' SHOTS');}return;}
     if(action==='aspect'){if(pressed)activateSelectedAspect();return;}
-    const key={leftCable:'KeyQ',rightCable:'KeyE',boost:'Space'}[action];
+    const key={leftCable:'KeyZ',rightCable:'KeyE',boost:'Space'}[action];
     if(key){
       mobileKey(key,pressed);
-      if(!pressed){if(key==='KeyQ')releaseUnheld(0);if(key==='KeyE')releaseUnheld(1);}
-      else if(key==='KeyQ'&&player.fire(0)||key==='KeyE'&&pressed&&player.fire(1))playBeep();
+      if(!pressed){if(key==='KeyZ')releaseUnheld(0);if(key==='KeyE')releaseUnheld(1);}
+      else if(key==='KeyZ'&&player.fire(0)||key==='KeyE'&&pressed&&player.fire(1))playBeep();
     }
   };
   button.addEventListener('pointerdown',(event)=>{
@@ -423,7 +423,7 @@ function attachEvents(){
     if(!input.keys.has(event.code)){
       if(event.code==='Space'&&(titanMode?titanPlayer.grounded:player.grounded))input.jumpQueued=true;
       if(titanMode){if(event.code==='KeyF')bladeStrike();if(event.code==='KeyX'||event.code==='KeyB')activateSelectedAspect();if(event.code==='KeyM')$('mapPanel').classList.toggle('hidden');if(event.code==='KeyR')startTitan(selectedTitan);if(event.code==='KeyP')savePhoto();if(event.code==='F3'){$('diagnostics').classList.toggle('hidden');}input.keys.add(event.code);return;}
-      if(event.code==='KeyQ'){if(player.fire(0))playBeep();}
+      if(event.code==='KeyZ'){if(player.fire(0))playBeep();}
       if(event.code==='KeyE'){if(player.fire(1))playBeep();}
       if(event.code==='KeyV'){player.firstPerson=!player.firstPerson;showToast(player.firstPerson?'FIRST-PERSON CAMERA':'THIRD-PERSON CAMERA');}
       if(event.code==='KeyR'){player.reset();clearActiveAspect();showToast('REDEPLOYED TO CENTRAL PLAZA');}
@@ -433,14 +433,14 @@ function attachEvents(){
       if(event.code==='KeyF')bladeStrike();
       if(event.code==='KeyB')spinStrike();
       if(event.code==='KeyC'){const muzzle=player.position.clone().add(new THREE.Vector3(0,1.25,0));if(ranged?.fire(muzzle,player.viewDirection()))showToast('SCOUT PISTOL · '+ranged.ammo+' REMAINING');else showToast('RELOADING / NO AMMO');}
-      if(event.code==='KeyX')activateSelectedAspect();
+      if(event.code==='KeyQ')activateSelectedAspect();
       // Ackerman Mode replaces the old nine-slot Aspect selection.
     }
     input.keys.add(event.code);
   });
   document.addEventListener('keyup',(event)=>{
     input.keys.delete(event.code);
-    if(event.code==='KeyQ')releaseUnheld(0);
+    if(event.code==='KeyZ')releaseUnheld(0);
     if(event.code==='KeyE')releaseUnheld(1);
   });
 }
@@ -499,7 +499,7 @@ function hudUpdate(){
     $('beaconDistance').textContent=`${Math.max(0,90-elapsed).toFixed(0)} SEC`;$('checkpointNumber').textContent='HOLD';
     $('missionText').textContent='Last Light · Survive the Riftborn assault';
   }else{$('beaconDistance').textContent='--';$('missionText').textContent='Free Flight · Explore '+(world.style==='minecraft-world'?'Shiganshina':'Asterfell');}
-  $('reticleText').textContent=l&&r?'DUAL HOOKS · SWING / REEL':l?'LEFT HOOK · RIGHT READY':r?'RIGHT HOOK · LEFT READY':'LMB / RMB OR Q / E TO GRAPPLE';
+  $('reticleText').textContent=l&&r?'DUAL HOOKS · SWING / REEL':l?'LEFT HOOK · RIGHT READY':r?'RIGHT HOOK · LEFT READY':'LMB / RMB OR Z / E TO GRAPPLE';
   if(!l&&!r){const target=player.target(0);$('reticle').classList.toggle('available',!!target);$('reticleText').textContent=target?`ANCHOR READY · ${Math.round(target.distanceTo(player.position))} M`:'NO ANCHOR IN RANGE';}
   else {const freeSide=l?1:0;const suggestion=l&&r?null:player.target(freeSide);
     $('reticle').classList.toggle('available',!!suggestion);
@@ -510,7 +510,7 @@ function hudUpdate(){
   const selected=ASPECTS[aspectState.selected],active=aspectState.active;
   $('aspectName').textContent=active?active.name.toUpperCase():selected.name.toUpperCase();
   $('aspectDescription').textContent=active?`${Math.ceil(aspectState.duration)} S ACTIVE`:selected.description.toUpperCase();
-  $('aspectKey').textContent=active?'7 SEC · ACTIVE':`X · ACTIVATE`;
+  $('aspectKey').textContent=active?'SLOW TIME · ACTIVE':`Q · ACTIVATE`;
   $('ackermanPcButton')?.classList.toggle('active',!!active);
   $('aspectFill').style.width=`${active?aspectState.duration/active.duration*100:Math.max(0,1-aspectState.cooldown/selected.cooldown)*100}%`;
   $('healthFill').style.width=`${player.health}%`;$('healthValue').textContent=`${Math.ceil(player.health)}%`;
