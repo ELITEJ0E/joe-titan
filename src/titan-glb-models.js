@@ -59,6 +59,7 @@ function makeBones(root){
 function skinnedVisual(gltf,kind){
  const pivot=new THREE.Group();
  pivot.name='User GLB skinned / '+kind;
+ pivot.rotation.y=Math.PI;
  const scene=gltf.scene;
  scene.updateMatrixWorld(true);
  const bbox=new THREE.Box3().setFromObject(scene);
@@ -86,7 +87,7 @@ function skinnedVisual(gltf,kind){
   const baseMaterials=Array.isArray(obj.material)?obj.material:[obj.material];
   const mats=baseMaterials.map(m=>{
     const material=new THREE.MeshStandardMaterial({
-      color:0xffffff,vertexColors:!!geo.attributes.color,roughness:.88,
+      color:0xffffff,vertexColors:!!geo.attributes.color,roughness:.88,toneMapped:false,
       flatShading:false,side:THREE.DoubleSide
     });
     if(m.map)material.map=m.map;
