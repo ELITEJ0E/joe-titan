@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {resolveWorldCollision} from './collision.js';
 import {decorateReferenceLandmarks} from './voxel-landmarks.js';
 import {ATMOSPHERE_DEFAULTS,sampleCinematicAtmosphere,createSkyUniforms,updateSkyUniforms,CINEMATIC_SKY_VERTEX,CINEMATIC_SKY_FRAGMENT} from './cinematic-atmosphere.js';
+import {makeVoxelPBRMaterial} from './voxel-surface-detail.js';
 
 // A self-contained, low-draw-call voxel-inspired medieval city.
 // All building blocks sharing a material and 120m chunk become one InstancedMesh;
@@ -13,7 +14,7 @@ const CHUNK=150;
 // Small generated Minecraft-inspired block textures. Patterns are original
 // (no Mojang textures); nearest filtering retains individual pixel edges.
 function pixelMaterial(color,seed,variation=27,kind=''){
-  if(typeof document==='undefined')return new THREE.MeshLambertMaterial({color});
+  if(typeof document==='undefined')return new THREE.MeshStandardMaterial({color,roughness:.84});
   const rng=random(seed),canvas=document.createElement('canvas');
   canvas.width=64;canvas.height=64;
   const ctx=canvas.getContext('2d');
@@ -57,7 +58,7 @@ function pixelMaterial(color,seed,variation=27,kind=''){
     clearcoat:.85,clearcoatRoughness:.17,
     transparent:true,opacity:.82,depthWrite:false,side:THREE.DoubleSide
   });
-  return new THREE.MeshLambertMaterial({map:texture,side:THREE.FrontSide});
+  return makeVoxelPBRMaterial(texture,kind,seed);
 }
 function makePalette(){
   const p={
@@ -443,6 +444,7 @@ export function createVoxelWorld(scene){
       skyDirty=false;skyLastUpdate=time;
       atmosphere=sampleCinematicAtmosphere(atmosphereValues);
       updateSkyUniforms(skyLayer.uniforms,atmosphere,time,fallbackCinematic?1.45:1);
+      skyLayer.uniforms.uSkyQuality.value=fallbackCinematic?1:0;
       sunlight.color.copy(atmosphere.sunColor);
       sunlight.intensity=atmosphere.sunlight*(fallbackCinematic?1.08:1);
       sunlight.position.copy(atmosphere.sunDirection).multiplyScalar(260);
@@ -467,6 +469,7 @@ export function createVoxelWorld(scene){
   world.setVisualQuality=(quality)=>{
     const cinematic=quality==='cinematic';
     fallbackCinematic=cinematic;
+    skyLayer.uniforms.uSkyQuality.value=cinematic?1:0;
     sunlight.intensity=atmosphere.sunlight*(cinematic?1.08:1);
     scene.fog.density=(menuClarity?.00042:(cinematic?.00175:.00135))*atmosphere.fogStrength;
     sunlight.shadow.mapSize.set(cinematic?2048:1024,cinematic?2048:1024);
