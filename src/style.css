@@ -67,6 +67,17 @@
 body.mouse-locked #game,body.mouse-locked .hud{cursor:none}
 
 
+.titan-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:18px 0}
+.titan-card{text-align:left;min-width:0;border:1px solid #b9c6c96a;background:#0b1b29ed;color:#e8e8e6;padding:12px;border-radius:6px;transition:background .15s,transform .15s}
+.titan-card:hover,.titan-card:focus-visible{background:#253b48;transform:translateY(-2px)}
+.titan-card strong{font-size:14px;display:block}
+.titan-card small{display:block;opacity:.75;font-size:9px;margin-top:5px}
+.titan-card em{display:block;color:#d7b28b;font-style:normal;margin-top:7px;font-size:9px}
+.titan-shell{width:min(740px,94vw);max-height:92dvh;overflow:auto}
+body.titan-active .hooks,body.titan-active .gas-head{display:none!important}
+body.titan-active .reticle{opacity:.35}
+body.titan-active .aspect{border-color:#e0b286}
+@media(max-width:650px){.titan-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.titan-card{padding:8px}.titan-card strong{font-size:11px}.titan-card small,.titan-card em{font-size:8px}.titan-shell h2{font-size:30px}}
 /* Mobile flight HUD v2: clear center view with a free-drag right hemisphere. */
 .mobile-pause-button{display:none}
 .touch-look-zone{position:absolute;inset:0 0 0 50%;z-index:0;pointer-events:auto;

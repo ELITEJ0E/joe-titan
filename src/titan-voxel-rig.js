@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {enhanceTitanRig,TITAN_FORMS} from './titan-forms.js';
 
 // Original Minecraft-style Titan rig. All dimensions are fractions of height;
 // the front faces local -Z and the nape is on the opposite (+Z) side.
@@ -127,8 +128,10 @@ export function createVoxelTitanRig(scene,enemy,{color=0x9b675c,height=15}={}){
   shadow.rotation.x=-Math.PI/2;shadow.position.y=.003;group.add(shadow);
   group.scale.setScalar(height);group.position.copy(enemy.position);
   scene.add(group);
-  return {group,hips,torso,neck,head,arms,legs,weak,alert,skin,
-    materials:[skin,shade,highlight],height,flash:0,gait:0,death:0};
+  const rig={group,hips,torso,neck,head,arms,legs,weak,alert,skin,
+    materials:[skin,shade,highlight,eye,mouth,gear,armor],height,flash:0,gait:0,death:0};
+  if(TITAN_FORMS[enemy.type])enhanceTitanRig(rig,enemy.type);
+  return rig;
 }
 
 const targetQuat=(x=0,y=0,z=0)=>new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z,'XYZ'));
