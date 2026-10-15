@@ -1,0 +1,10 @@
+armored_idle: original geometry, rig weights and animation data preserved
+armored_titan: original geometry, rig weights and animation data preserved
+attack_titan: original geometry, rig weights and animation data preserved
+beast_titan: original geometry, rig weights and animation data preserved
+colossal_titan: original geometry, rig weights and animation data preserved
+female_titan: original geometry, rig weights and animation data preserved
+founding_titan: original geometry, rig weights and animation data preserved
+jaw_titan: original geometry, rig weights and animation data preserved
+war_hammer_titan: original geometry, rig weights and animation data preserved
+PASS: all nine colored GLBs preserve their original mesh data.

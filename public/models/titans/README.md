@@ -1,39 +1,17 @@
 # JOE Titan character assets
 
-The nine GLB asset paths are loaded by `src/titan-glb-models.js`.
+The game loads these assets through src/titan-glb-models.js.
 
-## Replaced with user-supplied Meshy GLBs (October 2026)
+## Reference color pass — October 15, 2026
 
-- `armored_titan.glb` — user-uploaded Armored Titan mesh
-- `attack_titan.glb` — user-uploaded Attack Titan mesh
-- `beast_titan.glb` — user-uploaded Beast Titan mesh
-- `colossal_titan.glb` — user-uploaded Colossal Titan mesh
-- `female_titan.glb` — user-uploaded Female Titan mesh
-- `founding_titan.glb` — user-uploaded Founding Titan mesh
+Armored, Attack, Beast, Colossal, Female and Founding use the supplied detailed meshes with embedded reference-guided vertex colors. These are portable glTF linear colors with neutral, nonmetallic PBR materials; separate texture files or UV coordinates are unnecessary. The color pass approximates the eight supplied pictures rather than reconstructing exact hand-painted textures.
 
-These six original uploads contained geometry only: no material, texture/UV map,
-skin, animation or rig. To make them visible in game, the imported GLBs now carry
-approximate Titan-specific baked vertex colors and vertex normals.
+armored_idle.glb is the standing model. armored_titan.glb retains its original skeleton, weights, inverse bind matrices and Run_Stealth animation, with identical colors and added vertex normals. Original geometry and existing normals are preserved. The native idle/run switching behavior is unchanged.
 
-`src/titan-glb-models.js` builds a normalized bone hierarchy and weights
-individual GLB vertices at load time. `animateTitanGLB` moves separate
-heads, torsos, shoulders/elbows, hips/knees in the existing enemy/player update
-loop, including walking and attack poses. Skin weights are automatically
-estimated from body position; they are **not** artist-authored skin painting.
-Extreme poses may expose deformation artifacts, especially for the Founding
-Titan's unusual skeleton.
+Jaw and War Hammer are the repository's earlier, simpler procedural placeholders. Their embedded base-color textures now use the reference palette, and their Z-up roots are rotated to the game's Y-up convention. Their geometry still differs substantially from the supplied voxel references. Detailed versions of those two meshes were not present in this repository.
 
-## Existing placeholders, not user-uploaded
+Cart has no supplied reference and is unchanged.
 
-- `jaw_titan.glb`
-- `cart_titan.glb`
-- `war_hammer_titan.glb`
+Most detailed models remain unrigged source meshes. The game's existing automatic skinning remains an approximation, particularly for the Founding Titan. This color pass introduces no new animation and does not change polygon counts. Back colors are inferred because the references show one view per character.
 
-These three remain from the earlier procedural GLB build until their respective
-real GLB files are provided.
-
-The fallback low-detail voxel rig is displayed only while an asset is loading
-or if loading fails. The existing gameplay, hitbox and nape positions are kept.
-
-Performance consideration: the imported user meshes have high polygon counts
-and should eventually receive decimated LOD variants for mobile devices.
+See artifacts/titan-color-review/README.md for previews, validation and rebuild instructions. Original assets remain available in Git at commit 229e52f71d5ab5fb595aa5da03bf34bef635fe4d.
