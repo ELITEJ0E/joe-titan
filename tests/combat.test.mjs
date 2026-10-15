@@ -7,7 +7,7 @@ import {createEnemySimulation, strikeWeakPoint} from '../src/enemies.js';
 test('Ackerman Mode replaces the nine Aspect choices and keeps a real-time cooldown',()=>{
   assert.equal(ASPECTS.length,1);
   assert.equal(ASPECTS[0].name,'Ackerman Mode');
-  assert.equal(ASPECTS[0].duration,7);
+  assert.equal(ASPECTS[0].duration,12);
   const state=createAspectState();
   selectAspect(state,8);
   assert.equal(state.selected,0);
@@ -15,7 +15,7 @@ test('Ackerman Mode replaces the nine Aspect choices and keeps a real-time coold
   assert.equal(result.ok,true);
   assert.equal(state.active.effect,'ackerman');
   assert.equal(activateAspect(state).ok,false,'ability cannot stack');
-  updateAspect(state,6);
+  updateAspect(state,11);
   assert.equal(state.duration,1);
   assert.equal(state.active.name,'Ackerman Mode');
   updateAspect(state,1);
