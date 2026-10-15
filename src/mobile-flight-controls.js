@@ -7,8 +7,8 @@ export const MOBILE_ASSIST=Object.freeze({
 export function lookDragDelta(deltaX,deltaY){
   const dx=Number.isFinite(deltaX)?Math.max(-110,Math.min(110,deltaX)):0;
   const dy=Number.isFinite(deltaY)?Math.max(-110,Math.min(110,deltaY)):0;
-  return {yaw:-dx*MOBILE_ASSIST.lookYawPerPixel,
-    pitch:-dy*MOBILE_ASSIST.lookPitchPerPixel};
+  return {yaw:dx===0?0:-dx*MOBILE_ASSIST.lookYawPerPixel,
+    pitch:dy===0?0:-dy*MOBILE_ASSIST.lookPitchPerPixel};
 }
 export function mobileHookAssistance({mobileAssist=false,activeHooks=0,
   grounded=false,gas=0,manualBoost=false}={}){
