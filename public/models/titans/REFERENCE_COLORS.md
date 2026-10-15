@@ -1,0 +1,1 @@
+Reference PNG colors should be baked into Titan GLBs as vertex colors. Uploaded Meshy meshes face +Z; gameplay forward is -Z.
