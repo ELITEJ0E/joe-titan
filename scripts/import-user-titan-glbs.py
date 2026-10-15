@@ -3,7 +3,7 @@ The meshes contain no UVs, materials, bones or animations. This builds visible
 colors without pretending to recover the fine textures from reference renders.
 Runtime skinning and animation are applied by src/titan-glb-models.js."""
 from pathlib import Path
-import urllib.request
+import subprocess
 import numpy as np
 import trimesh
 
@@ -28,9 +28,9 @@ PALETTES = {
 def bake(kind):
  path=OUT/(kind+'_titan.glb')
  source=path.with_suffix('.original.glb')
- req=urllib.request.Request(SOURCE[kind],headers={'User-Agent':'JOE-Titan-Assets/1.0'})
- with urllib.request.urlopen(req,timeout=35) as response:
-  source.write_bytes(response.read())
+ print('Downloading',kind,flush=True)
+ subprocess.run(['curl','--fail','--location','--connect-timeout','12','--max-time','50','--retry','1','--retry-delay','2','--output',str(source),SOURCE[kind]],check=True,timeout=55)
+ print('Downloaded',kind,source.stat().st_size,flush=True)
  scene=trimesh.load(source,force='scene',process=False)
  mesh=trimesh.util.concatenate(list(scene.geometry.values()))
  v=np.asarray(mesh.vertices,dtype=np.float64)
