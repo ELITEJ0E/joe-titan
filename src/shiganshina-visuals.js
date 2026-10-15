@@ -87,10 +87,16 @@ void main(){
  vec4 w=modelMatrix*vec4(position,1.);
  // Tiny broad water displacement. Keep this in the vertex shader so the
  // surface silhouette and specular highlights follow the same small wave.
+ vec3 surfaceNormal=normal;
  if(aTile>16.5&&aTile<17.5&&normal.y>.5){
-  w.y+=.045*sin(w.x*.32+uTime*1.4)*cos(w.z*.38-uTime*1.0);
+  float wx=w.x*.32+uTime*1.4,wz=w.z*.38-uTime*1.0;
+  w.y+=.095*sin(wx)*cos(wz);
+  // Water specular responds to the ACTUAL wave slope.
+  float sx=.095*.32*cos(wx)*cos(wz);
+  float sz=-.095*.38*sin(wx)*sin(wz);
+  surfaceNormal=normalize(vec3(-sx,1.,-sz));
  }
- vWorld=w.xyz;vNormal=normalize(mat3(modelMatrix)*normal);
+ vWorld=w.xyz;vNormal=normalize(mat3(modelMatrix)*surfaceNormal);
  gl_Position=projectionMatrix*viewMatrix*w;
 }`;
 const fs=`
@@ -151,7 +157,7 @@ void main(){
    vec3 reflection=mix(uHorizonTint,uZenithTint,clamp(reflect(-viewer,n).y*.5+.5,0.,1.));
    vec3 shallow=vec3(.21,.46,.53);
    lit=mix(lit,shallow,.28);
-   lit=mix(lit,reflection,.18+fresnel*.56);
+   lit=mix(lit,reflection,.085+fresnel*.72);
    lit+=uSunTint*(spec*.34+max(0.,wave)*sun*.018);
  }else if(vTile>26.5&&vTile<27.5){
    lit+=base*vec3(.80,.46,.18);
@@ -170,7 +176,8 @@ void main(){
  float fog=distanceFog*(.56+.23*horizontal)*uFogStrength;
  vec3 mist=uFogColor+uSunTint*forwardScatter*.055*uSunStrength;
  lit=mix(lit,mist,clamp(fog,0.,.75));
- float alpha=vTile>16.5&&vTile<17.5?.83:1.;
+ float opticalFresnel=pow(1.-clamp(abs(dot(n,viewer)),0.,1.),5.);
+ float alpha=vTile>16.5&&vTile<17.5?clamp(.64+opticalFresnel*.30,.64,.94):1.;
  gl_FragColor=vec4(lit,alpha);
  #include <tonemapping_fragment>
  #include <colorspace_fragment>
