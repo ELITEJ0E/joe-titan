@@ -25,3 +25,12 @@ export function mobileHookAssistance({mobileAssist=false,activeHooks=0,
 export function isMobileBackActive({started=false,finished=false,mobile=false}={}){
   return !!mobile&&!!started&&!finished;
 }
+
+export function floatingStickVector(startX,startY,x,y,radius=46){
+ const dx=x-startX,dy=y-startY,r=Math.max(12,radius);
+ const scale=Math.min(1,r/Math.max(1,Math.hypot(dx,dy)));
+ return {x:dx*scale/r,y:dy*scale/r,offsetX:dx*scale,offsetY:dy*scale};
+}
+export function ackermanPilotScale({active=false,hooked=false}={}){
+ return active?(hooked?1:.34):1;
+}

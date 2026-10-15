@@ -6,7 +6,7 @@ import {normaliseVisualQuality} from './shiganshina-visuals.js';
 import {createPlayer} from './player.js';
 import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, updateAspect,ackermanWorldScale} from './aspects.js';
-import {lookDragDelta,isMobileBackActive} from './mobile-flight-controls.js';
+import {lookDragDelta,isMobileBackActive,floatingStickVector} from './mobile-flight-controls.js';
 import {createEnemyManager} from './enemies.js';
 import {createSupplyDrops} from './supplies.js';
 import {createRangedCombat} from './ranged-combat.js';
@@ -20,7 +20,7 @@ const $=(id)=>document.getElementById(id);
 const canvas=$('game');
 const hud=$('hud'),menu=$('menu'),missionSelect=$('missionSelect'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
-const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},lastX:0,lastY:0};
+const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},lastX:0,lastY:0,stickX:0,stickY:0,boostPointer:null,boostX:0,boostY:0};
 const isTouchLayout=()=>matchMedia('(pointer: coarse)').matches;
 let mobileBackArmed=false;
 let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies,ranged,cutEffects;
@@ -107,7 +107,7 @@ async function init(){
   requestAnimationFrame(loop);
 }
 function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();if(graphics)graphics.resize();else renderer.setSize(innerWidth,innerHeight,false);}
-function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');player?.release(0);player?.release(1);}
+function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileInput.boostPointer=null;mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');const stick=$('moveStick');if(stick)stick.style.display='none';player?.release(0);player?.release(1);}
 function mouseCaptureState(){
   return {started,paused,finished,
     coarsePointer:matchMedia('(pointer: coarse)').matches,
@@ -223,35 +223,38 @@ function savePhoto(){
 function mobileKey(code,pressed){if(pressed)input.keys.add(code);else input.keys.delete(code);}
 function hookHeld(index){return index===0?(input.mouse.left||input.keys.has('KeyQ')):(input.mouse.right||input.keys.has('KeyE'));}
 function releaseUnheld(index){if(!hookHeld(index))player?.release(index);}
-function setupTouchStick(id){
-  const stick=$(id);if(!stick)return;
-  const knob=stick.querySelector('span');
-  const end=(event)=>{
+function setupTouchStick(){
+  const zone=$('touchMoveZone'),stick=$('moveStick'),knob=stick?.querySelector('span');
+  if(!zone||!stick||!knob)return;
+  const clear=event=>{
     if(event?.pointerId!=null&&mobileInput.movePointer!==event.pointerId)return;
     mobileInput.movePointer=null;mobileInput.move={x:0,y:0};
-    ['KeyW','KeyA','KeyS','KeyD'].forEach((key)=>mobileKey(key,false));
-    stick.classList.remove('active');knob.style.transform='translate(-50%,-50%)';
+    ['KeyW','KeyA','KeyS','KeyD'].forEach(key=>mobileKey(key,false));
+    stick.classList.remove('active');stick.style.display='none';
+    knob.style.transform='translate(-50%,-50%)';
   };
-  const update=(event)=>{
-    const rect=stick.getBoundingClientRect(),radius=Math.max(22,Math.min(rect.width,rect.height)*.37);
-    const dx=event.clientX-(rect.left+rect.width/2),dy=event.clientY-(rect.top+rect.height/2);
-    const length=Math.hypot(dx,dy),scale=length>radius?radius/length:1;
-    const x=dx*scale/radius,y=dy*scale/radius;
-    knob.style.transform=`translate(calc(-50% + ${x*radius}px),calc(-50% + ${y*radius}px))`;
-    mobileInput.move={x,y};
-    mobileKey('KeyA',x<-.20);mobileKey('KeyD',x>.20);
-    mobileKey('KeyW',y<-.20);mobileKey('KeyS',y>.20);
+  const move=event=>{
+    const v=floatingStickVector(mobileInput.stickX,mobileInput.stickY,event.clientX,event.clientY,43);
+    mobileInput.move={x:v.x,y:v.y};
+    knob.style.transform=`translate(calc(-50% + ${v.offsetX}px),calc(-50% + ${v.offsetY}px))`;
+    mobileKey('KeyA',v.x<-.2);mobileKey('KeyD',v.x>.2);
+    mobileKey('KeyW',v.y<-.2);mobileKey('KeyS',v.y>.2);
   };
-  stick.addEventListener('pointerdown',(event)=>{
+  zone.addEventListener('pointerdown',event=>{
     if(!started||paused||finished||mobileInput.movePointer!==null)return;
     event.preventDefault();mobileInput.movePointer=event.pointerId;
-    stick.setPointerCapture(event.pointerId);stick.classList.add('active');update(event);
+    mobileInput.stickX=event.clientX;mobileInput.stickY=event.clientY;
+    const rect=zone.getBoundingClientRect();
+    stick.style.left=`${event.clientX-rect.left}px`;
+    stick.style.top=`${event.clientY-rect.top}px`;
+    stick.style.display='block';stick.classList.add('active');
+    zone.setPointerCapture(event.pointerId);move(event);
   });
-  stick.addEventListener('pointermove',(event)=>{
+  zone.addEventListener('pointermove',event=>{
     if(mobileInput.movePointer!==event.pointerId)return;
-    event.preventDefault();update(event);
+    event.preventDefault();move(event);
   });
-  for(const type of ['pointerup','pointercancel','lostpointercapture'])stick.addEventListener(type,end);
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])zone.addEventListener(type,clear);
 }
 function setupTouchLookZone(){
   const zone=$('touchLookZone');if(!zone)return;
@@ -294,11 +297,26 @@ function setupTouchButton(button){
       else if(key==='KeyQ'&&player.fire(0)||key==='KeyE'&&pressed&&player.fire(1))playBeep();
     }
   };
-  button.addEventListener('pointerdown',(event)=>{event.preventDefault();button.setPointerCapture(event.pointerId);set(true);});
-  button.addEventListener('pointerup',()=>set(false));button.addEventListener('pointercancel',()=>set(false));button.addEventListener('lostpointercapture',()=>set(false));
+  button.addEventListener('pointerdown',(event)=>{
+    event.preventDefault();button.setPointerCapture(event.pointerId);
+    if(action==='boost'){
+      mobileInput.boostPointer=event.pointerId;
+      mobileInput.boostX=event.clientX;mobileInput.boostY=event.clientY;
+    }
+    set(true);
+  });
+  if(action==='boost')button.addEventListener('pointermove',event=>{
+    // Thumb can swipe the camera while continuously holding BOOST.
+    if(mobileInput.boostPointer!==event.pointerId||paused||finished)return;
+    const delta=lookDragDelta(event.clientX-mobileInput.boostX,event.clientY-mobileInput.boostY);
+    mobileInput.boostX=event.clientX;mobileInput.boostY=event.clientY;
+    player.yaw+=delta.yaw;player.pitch+=delta.pitch;
+  });
+  const lift=()=>{if(action==='boost')mobileInput.boostPointer=null;set(false);};
+  button.addEventListener('pointerup',lift);button.addEventListener('pointercancel',lift);button.addEventListener('lostpointercapture',lift);
 }
 function setupTouchControls(){
-  setupTouchStick('moveStick');setupTouchLookZone();
+  setupTouchStick();setupTouchLookZone();
   mobileControls?.querySelectorAll('[data-touch-action]').forEach(setupTouchButton);
 }
 function showMissionBoard(){updateMissionBoard();menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.remove('hidden');}
@@ -313,6 +331,7 @@ function attachEvents(){
   $('photoButton').onclick=()=>savePhoto();
   $('graphicsPauseButton').onclick=toggleGraphicsQuality;
   $('mobilePauseButton').onclick=()=>{halt();};
+  $('ackermanPcButton').onclick=()=>{if(started&&!paused&&!finished)activateSelectedAspect();};
   $('graphicsMenuButton').onclick=toggleGraphicsQuality;
   $('createRoomButton').onclick=()=>{multiplayer.start();const code=multiplayer.createRoom();if(code){$('roomCodeInput').value=code;$('roomMessage').textContent=`ROOM CODE: ${code} · SHARE IT WITH A FRIEND`;}else $('roomMessage').textContent='CONNECTING TO PEER SERVER… YOUR ROOM CODE WILL APPEAR HERE';};
   $('joinRoomButton').onclick=()=>{const code=$('roomCodeInput').value.trim();if(!code){$('roomMessage').textContent='ENTER A ROOM CODE FIRST';return;}multiplayer.joinRoom(code);$('roomMessage').textContent='CONNECTING TO ROOM…';};
@@ -462,7 +481,8 @@ function hudUpdate(){
   const selected=ASPECTS[aspectState.selected],active=aspectState.active;
   $('aspectName').textContent=active?active.name.toUpperCase():selected.name.toUpperCase();
   $('aspectDescription').textContent=active?`${Math.ceil(aspectState.duration)} S ACTIVE`:selected.description.toUpperCase();
-  $('aspectKey').textContent=active?'SLOW TIME':`X · ACKERMAN`;
+  $('aspectKey').textContent=active?'7 SEC · ACTIVE':`X · ACTIVATE`;
+  $('ackermanPcButton')?.classList.toggle('active',!!active);
   $('aspectFill').style.width=`${active?aspectState.duration/active.duration*100:Math.max(0,1-aspectState.cooldown/selected.cooldown)*100}%`;
   $('healthFill').style.width=`${player.health}%`;$('healthValue').textContent=`${Math.ceil(player.health)}%`;
   $('threatCount').textContent=String(enemies.living()).padStart(2,'0');
