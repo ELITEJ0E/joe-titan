@@ -146,6 +146,7 @@ function armMobileBack(){
 }
 function startOrResume(){
   started=true;paused=false;finished=false;
+  document.body.classList.add('flight-active');
   world.setMenuClarity?.(false);
   menu.classList.add('hidden');missionSelect.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
   mobileControls?.classList.remove('hidden');
@@ -154,11 +155,11 @@ function startOrResume(){
   armMobileBack();
   requestControl();
 }
-function halt(){if(!started||finished||paused)return;paused=true;clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Press ESC again to resume, or return to the main menu.';refreshCaptureHint();}
+function halt(){if(!started||finished||paused)return;paused=true;document.body.classList.remove('flight-active');clearInputs();mobileControls?.classList.add('hidden');pause.classList.remove('hidden');$('pauseTitle').textContent='FLIGHT PAUSED';$('pauseMessage').textContent='Press ESC again to resume, or return to the main menu.';refreshCaptureHint();}
 function quitToMainMenu(){
   if(document.pointerLockElement===canvas)document.exitPointerLock();
   clearInputs();started=false;paused=false;finished=false;accumulator=0;
-  mobileBackArmed=false;document.body.classList.remove('ackerman-active');
+  mobileBackArmed=false;document.body.classList.remove('ackerman-active','flight-active');
   hud.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.add('hidden');
   mobileControls?.classList.add('hidden');menu.classList.remove('hidden');
   world.setMenuClarity?.(true);
@@ -398,7 +399,7 @@ function attachEvents(){
 }
 function completeMission(success=true){
   if(finished)return;
-  finished=true;clearInputs();mobileControls?.classList.add('hidden');hud.classList.add('hidden');missionSelect.classList.add('hidden');complete.classList.remove('hidden');
+  finished=true;document.body.classList.remove('flight-active');clearInputs();mobileControls?.classList.add('hidden');hud.classList.add('hidden');missionSelect.classList.add('hidden');complete.classList.remove('hidden');
   const records=success?recordMission(missionRecords,missionMode,missionMode==='course'||missionMode==='hunt'?elapsed:undefined):{newBest:false};
   if(success&&missionMode!=='free'){missionRecords=records.records;persistMissionRecords();updateMissionBoard();}
   best=missionRecords.bestTimes[missionMode]||null;
