@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {createArmoredNative,updateArmoredNative} from './armored-native-rig.js';
 
 // Uploaded user meshes are unrigged and have no source animations.
 // Build a lightweight per-vertex skeletal skin, then animate it at runtime.
@@ -59,6 +60,8 @@ function makeBones(root){
 function skinnedVisual(gltf,kind){
  const pivot=new THREE.Group();
  pivot.name='User GLB skinned / '+kind;
+ // The imported model faces +Z but locomotion expects local -Z.
+ pivot.rotation.y=Math.PI;
  const scene=gltf.scene;
  scene.updateMatrixWorld(true);
  const bbox=new THREE.Box3().setFromObject(scene);
@@ -103,6 +106,7 @@ function skinnedVisual(gltf,kind){
  return {pivot,bones,skeleton};
 }
 export function animateTitanGLB(rig,enemy,dt,time){
+ if(rig.nativeArmored){updateArmoredNative(rig,enemy,dt);return;}
  if(!rig.modelSkeleton)return;
  const b=rig.modelSkeleton.bones,move=clamp(enemy.moving||0,0,1),
  gait=rig.gait,walk=Math.sin(gait)*.39*move,atk=enemy.attackPhase||'idle',
@@ -129,12 +133,14 @@ export function attachTitanGLB(rig,kind){
  rig.modelStatus='loading';
  rig.modelReady=load(kind).then(gltf=>{
   if(rig.disposed)return false;
-  const skinned=skinnedVisual(gltf,kind);
+  const native=kind==='armored'?createArmoredNative(gltf):null;
+  const skinned=native?{pivot:native.root,bones:null,skeleton:null}:skinnedVisual(gltf,kind);
   // Prevent the old blocky meshes from displaying behind the actual character.
   rig.group.traverse(obj=>{if(obj.isMesh&&obj.geometry?.type!=='CircleGeometry')obj.visible=false;});
   rig.group.add(skinned.pivot);
   rig.modelVisual=skinned.pivot;
-  rig.modelSkeleton=skinned;
+  rig.modelSkeleton=native?null:skinned;
+  rig.nativeArmored=native;
   rig.modelStatus='loaded';
   return true;
  }).catch(err=>{
