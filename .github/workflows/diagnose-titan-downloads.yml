@@ -1,0 +1,14 @@
+name: Diagnose GLB source downloads
+on:
+  push:
+    branches: [feature/user-glb-rigged-titans]
+    paths: ['.github/workflows/diagnose-titan-downloads.yml']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: |
+          date -u
+          curl --fail --location --connect-timeout 10 --max-time 20 --silent --show-error --output /dev/null --write-out 'source HTTP %{http_code}, %{size_download} bytes, %{time_total} seconds\n' 'https://d2ol7oe51mr4n9.cloudfront.net/user_34QjeOFhUZCLT9wZ4vgB98VZeog/f6380f04-20d7-4958-9893-7c4b9215ab95.glb'
+          date -u
