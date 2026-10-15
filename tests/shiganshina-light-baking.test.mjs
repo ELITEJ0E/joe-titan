@@ -47,6 +47,6 @@ test('Minecraft surface shader consumes pre-baked AO and sunlight attributes',()
   assert.ok(visual.material.fragmentShader.includes('vAO'));
   assert.equal(visual.material.uniforms.uSunShadow.value,1);
   visual.setQuality('performance');
-  assert.equal(visual.material.uniforms.uSunShadow.value,.70);
+  assert.equal(visual.material.uniforms.uSunShadow.value,VISUAL_PRESETS.performance.sunShadow);
  }finally{globalThis.document=prior;}
 });
