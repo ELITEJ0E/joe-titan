@@ -22,7 +22,7 @@ const $=(id)=>document.getElementById(id);
 const canvas=$('game');
 const hud=$('hud'),menu=$('menu'),missionSelect=$('missionSelect'),pause=$('pause'),complete=$('complete'),toast=$('toast'),mobileControls=$('mobileControls');
 const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
-const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},lastX:0,lastY:0,stickX:0,stickY:0,boostPointer:null,boostX:0,boostY:0};
+const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},lastX:0,lastY:0,stickX:0,stickY:0,boostPointer:null,boostX:0,boostY:0,lookTouches:new Map(),pinchDistance:0};
 const isTouchLayout=()=>matchMedia('(pointer: coarse)').matches;
 let mobileBackArmed=false;
 let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies,ranged,cutEffects,titanPlayer;
@@ -110,7 +110,7 @@ async function init(){
   requestAnimationFrame(loop);
 }
 function resize(){if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();if(graphics)graphics.resize();else renderer.setSize(innerWidth,innerHeight,false);}
-function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileInput.boostPointer=null;mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');const stick=$('moveStick');if(stick)stick.style.display='none';player?.release(0);player?.release(1);}
+function clearInputs(){input.keys.clear();input.mouse.left=false;input.mouse.right=false;input.jumpQueued=false;mobileInput.movePointer=null;mobileInput.lookPointer=null;mobileInput.move={x:0,y:0};mobileInput.boostPointer=null;mobileInput.lookTouches.clear();mobileInput.pinchDistance=0;mobileControls?.querySelectorAll('.touch-btn.active').forEach((button)=>button.classList.remove('active'));mobileControls?.querySelectorAll('.touch-stick span').forEach((knob)=>knob.style.transform='translate(-50%,-50%)');const stick=$('moveStick');if(stick)stick.style.display='none';player?.release(0);player?.release(1);}
 function mouseCaptureState(){
   return {started,paused,finished,
     coarsePointer:matchMedia('(pointer: coarse)').matches,
@@ -165,6 +165,7 @@ function quitToMainMenu(){
   mobileBackArmed=false;document.body.classList.remove('ackerman-active','flight-active','titan-active');titanPlayer?.dispose();titanMode=false;player.model.root.visible=true;
   hud.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.add('hidden');
   mobileControls?.classList.add('hidden');menu.classList.remove('hidden');
+  world.resetDestruction?.();
   world.setMenuClarity?.(true);
   refreshCaptureHint();
   updateMissionBoard();
@@ -174,6 +175,7 @@ function startFresh(mode='course'){
   titanPlayer?.dispose();titanMode=false;document.body.classList.remove('titan-active');player.model.root.visible=true;
   missionMode=MISSION_MODES.some(mission=>mission.id===mode)?mode:'course';
   practice=missionMode!=='course';courseIndex=missionMode==='course'?0:TOTAL;elapsed=0;finished=false;
+  world.resetDestruction?.();
   player.reset();enemies.reset();supplies?.reset();ranged?.reset();cutEffects?.clear();aspectState=createAspectState();world.setBeaconActive(missionMode==='course'?0:-1);
   $('checkpointNumber').textContent=missionMode==='course'?'01':missionMode==='hunt'?`${enemies.living()}`:'--';
   $('trialButton').textContent='START SKYLINE CIRCUIT ↗';
@@ -181,6 +183,7 @@ function startFresh(mode='course'){
 }
 function startTitan(id){
   selectedTitan=id;titanMode=true;missionMode='free';practice=true;courseIndex=TOTAL;elapsed=0;finished=false;
+  world.resetDestruction?.();
   player.reset();enemies.reset();supplies?.reset();ranged?.reset();cutEffects?.clear();aspectState=createAspectState();
   world.setBeaconActive(-1);clearInputs();
   titanPlayer.choose(id,player.position);player.model.root.visible=false;
@@ -270,24 +273,51 @@ function setupTouchStick(){
 }
 function setupTouchLookZone(){
   const zone=$('touchLookZone');if(!zone)return;
-  const stop=(event)=>{
-    if(event?.pointerId!=null&&mobileInput.lookPointer!==event.pointerId)return;
-    mobileInput.lookPointer=null;zone.classList.remove('active');
+  const pinchDistance=()=>{
+    const touches=[...mobileInput.lookTouches.values()];
+    return touches.length<2?0:Math.hypot(touches[1].x-touches[0].x,touches[1].y-touches[0].y);
   };
-  zone.addEventListener('pointerdown',(event)=>{
-    if(!started||paused||finished||mobileInput.lookPointer!==null)return;
-    event.preventDefault();mobileInput.lookPointer=event.pointerId;
-    mobileInput.lastX=event.clientX;mobileInput.lastY=event.clientY;
-    zone.setPointerCapture(event.pointerId);zone.classList.add('active');
+  const stop=event=>{
+    mobileInput.lookTouches.delete(event.pointerId);
+    if(mobileInput.lookPointer===event.pointerId){
+      const first=mobileInput.lookTouches.entries().next().value;
+      mobileInput.lookPointer=first?.[0]??null;
+      if(first){mobileInput.lastX=first[1].x;mobileInput.lastY=first[1].y;}
+    }
+    mobileInput.pinchDistance=pinchDistance();
+    if(mobileInput.lookTouches.size===0)zone.classList.remove('active');
+  };
+  zone.addEventListener('pointerdown',event=>{
+    if(!started||paused||finished||mobileInput.lookTouches.size>=2)return;
+    event.preventDefault();zone.setPointerCapture(event.pointerId);
+    mobileInput.lookTouches.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(mobileInput.lookPointer===null){
+      mobileInput.lookPointer=event.pointerId;
+      mobileInput.lastX=event.clientX;mobileInput.lastY=event.clientY;
+    }
+    mobileInput.pinchDistance=pinchDistance();
+    zone.classList.add('active');
   });
-  zone.addEventListener('pointermove',(event)=>{
-    if(mobileInput.lookPointer!==event.pointerId||paused||finished)return;
+  zone.addEventListener('pointermove',event=>{
+    if(!mobileInput.lookTouches.has(event.pointerId)||paused||finished)return;
     event.preventDefault();
+    mobileInput.lookTouches.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(mobileInput.lookTouches.size===2){
+      const distance=pinchDistance();
+      if(mobileInput.pinchDistance>0){
+        (titanMode?titanPlayer:player).adjustZoom((mobileInput.pinchDistance-distance)*2.5);
+      }
+      mobileInput.pinchDistance=distance;
+      return;
+    }
+    if(mobileInput.lookPointer!==event.pointerId)return;
     const delta=lookDragDelta(event.clientX-mobileInput.lastX,event.clientY-mobileInput.lastY);
     mobileInput.lastX=event.clientX;mobileInput.lastY=event.clientY;
-    const controller=titanMode?titanPlayer:player;controller.yaw+=delta.yaw;controller.pitch+=delta.pitch;
+    const controller=titanMode?titanPlayer:player;
+    controller.yaw+=delta.yaw;controller.pitch+=delta.pitch;
   });
-  for(const type of ['pointerup','pointercancel','lostpointercapture'])zone.addEventListener(type,stop);
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])
+    zone.addEventListener(type,stop);
 }
 function setupTouchButton(button){
   const action=button.dataset.touchAction;
@@ -378,6 +408,12 @@ function attachEvents(){
     hadPointerLock=locked;
     refreshCaptureHint();
   });
+  document.addEventListener('wheel',event=>{
+    if(!started||paused||finished)return;
+    if(document.pointerLockElement!==canvas&&event.target!==canvas)return;
+    event.preventDefault();
+    (titanMode?titanPlayer:player).adjustZoom(event.deltaY);
+  },{passive:false});
   document.addEventListener('mousemove',(event)=>{
     if(!started||paused||finished)return;
     if(document.pointerLockElement!==canvas&&(document.activeElement!==canvas||!event.buttons))return;
