@@ -4,6 +4,8 @@ import {loadMinecraftWorld} from './minecraft-world.js';
 import {createGraphicsQuality} from './graphics-quality.js';
 import {normaliseVisualQuality} from './shiganshina-visuals.js';
 import {createPlayer} from './player.js';
+import {createTitanPlayer} from './titan-player.js';
+import {TITAN_FORMS,TITAN_ORDER} from './titan-forms.js';
 import {createNavigation} from './navigation.js';
 import {ASPECTS, activateAspect, createAspectState, updateAspect,ackermanWorldScale} from './aspects.js';
 import {lookDragDelta,isMobileBackActive,floatingStickVector} from './mobile-flight-controls.js';
@@ -23,7 +25,8 @@ const input={keys:new Set(),mouse:{left:false,right:false},jumpQueued:false};
 const mobileInput={movePointer:null,lookPointer:null,move:{x:0,y:0},lastX:0,lastY:0,stickX:0,stickY:0,boostPointer:null,boostX:0,boostY:0};
 const isTouchLayout=()=>matchMedia('(pointer: coarse)').matches;
 let mobileBackArmed=false;
-let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies,ranged,cutEffects;
+let renderer,scene,camera,world,player,navigation,enemies,aspectState,multiplayer,graphics,supplies,ranged,cutEffects,titanPlayer;
+let titanMode=false,selectedTitan='attack';
 let visualQuality='performance';
 try{visualQuality=normaliseVisualQuality(localStorage.getItem('joe-titan-graphics'));}catch{}
 let started=false,paused=false,finished=false,courseIndex=0,elapsed=0,best=null,toastUntil=0,lastHud=0,gameTime=0;
@@ -97,7 +100,7 @@ async function init(){
   updateGraphicsButtons();
   player=createPlayer(scene,world,camera);
   cutEffects=createScoutCutEffects(scene);
-  enemies=createEnemyManager(scene,world);supplies=createSupplyDrops(scene,world);ranged=createRangedCombat(scene,world,enemies);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
+  enemies=createEnemyManager(scene,world);titanPlayer=createTitanPlayer(scene,world,camera,enemies);supplies=createSupplyDrops(scene,world);ranged=createRangedCombat(scene,world,enemies);aspectState=createAspectState();navigation=createNavigation(world,player,camera);
   multiplayer=createMultiplayer(scene,{onStatus:({status,detail,peerId})=>{const label=$('networkStatus');if(label)label.textContent=status;const message=$('roomMessage');if(message&&detail)message.textContent=peerId&&status==='READY'?`ROOM CODE: ${peerId}`:detail;if(peerId&&status==='READY'&&!$('roomCodeInput').value)$('roomCodeInput').value=peerId;},onCount:(count)=>{$('networkCount').textContent=`${count} PILOT${count===1?'':'S'}`;}});
   world.setMenuClarity?.(true);
   const intro=titleCameraPose(0);
@@ -148,7 +151,7 @@ function startOrResume(){
   started=true;paused=false;finished=false;
   document.body.classList.add('flight-active');
   world.setMenuClarity?.(false);
-  menu.classList.add('hidden');missionSelect.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
+  menu.classList.add('hidden');missionSelect.classList.add('hidden');$('titanSelect').classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');hud.classList.remove('hidden');
   mobileControls?.classList.remove('hidden');
   canvas.focus();accumulator=0;
   if(matchMedia('(pointer: coarse)').matches)enterImmersive();
@@ -159,7 +162,7 @@ function halt(){if(!started||finished||paused)return;paused=true;document.body.c
 function quitToMainMenu(){
   if(document.pointerLockElement===canvas)document.exitPointerLock();
   clearInputs();started=false;paused=false;finished=false;accumulator=0;
-  mobileBackArmed=false;document.body.classList.remove('ackerman-active','flight-active');
+  mobileBackArmed=false;document.body.classList.remove('ackerman-active','flight-active','titan-active');titanPlayer?.dispose();titanMode=false;player.model.root.visible=true;
   hud.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.add('hidden');
   mobileControls?.classList.add('hidden');menu.classList.remove('hidden');
   world.setMenuClarity?.(true);
@@ -168,6 +171,7 @@ function quitToMainMenu(){
   document.activeElement?.blur?.();
 }
 function startFresh(mode='course'){
+  titanPlayer?.dispose();titanMode=false;document.body.classList.remove('titan-active');player.model.root.visible=true;
   missionMode=MISSION_MODES.some(mission=>mission.id===mode)?mode:'course';
   practice=missionMode!=='course';courseIndex=missionMode==='course'?0:TOTAL;elapsed=0;finished=false;
   player.reset();enemies.reset();supplies?.reset();ranged?.reset();cutEffects?.clear();aspectState=createAspectState();world.setBeaconActive(missionMode==='course'?0:-1);
@@ -175,8 +179,16 @@ function startFresh(mode='course'){
   $('trialButton').textContent='START SKYLINE CIRCUIT ↗';
   clearInputs();startOrResume();hudUpdate();
 }
+function startTitan(id){
+  selectedTitan=id;titanMode=true;missionMode='free';practice=true;courseIndex=TOTAL;elapsed=0;finished=false;
+  player.reset();enemies.reset();supplies?.reset();ranged?.reset();cutEffects?.clear();aspectState=createAspectState();
+  world.setBeaconActive(-1);clearInputs();
+  titanPlayer.choose(id,player.position);player.model.root.visible=false;
+  document.body.classList.add('titan-active');startOrResume();titanPlayer.updateCamera(1,true);hudUpdate();
+}
 function clearActiveAspect(){aspectState.active=null;aspectState.duration=0;player.clearAspect();document.body.classList.remove('ackerman-active');}
 function activateSelectedAspect(){
+  if(titanMode){const result=titanPlayer.special();showToast(result.ok?`${result.name.toUpperCase()} · ${result.hits} TARGETS HIT`:`${Math.ceil(result.remaining)} S RECHARGE`);return;}
   const result=activateAspect(aspectState);
   if(!result.ok){showToast(result.reason==='ACTIVE'?'ASPECT ALREADY ACTIVE':`RECHARGING · ${Math.ceil(result.remaining)} S`);return;}
   const aspect=result.aspect;player.setAspect(aspect);
@@ -189,8 +201,8 @@ function activateSelectedAspect(){
   if(aspect.effect==='command')enemies.suppress();
   showToast(aspect.effect==='ackerman'?'ACKERMAN MODE · 7 SECONDS OF BULLET TIME':`${aspect.name.toUpperCase()} ASPECT ENGAGED`);
 }
-function bladeStrike(){player.attack();}
-function spinStrike(){if(player.spin())showToast('SPIN CUT · COMBAT ARC');}
+function bladeStrike(){if(titanMode){const hits=titanPlayer.attack();if(hits)showToast(`TITAN STRIKE · ${hits} TARGETS HIT`);return;}player.attack();}
+function spinStrike(){if(titanMode){activateSelectedAspect();return;}if(player.spin())showToast('SPIN CUT · COMBAT ARC');}
 function resolveBladeStrike(kind='slash'){
   const alignment=player.speed>1?Math.max(0,player.velocity.clone().normalize().dot(player.viewDirection())):0;
   const flightBonus=Math.min(18,Math.max(0,player.speed-14)*.36)*(.5+.5*alignment);
@@ -222,7 +234,7 @@ function savePhoto(){
 }
 function mobileKey(code,pressed){if(pressed)input.keys.add(code);else input.keys.delete(code);}
 function hookHeld(index){return index===0?(input.mouse.left||input.keys.has('KeyQ')):(input.mouse.right||input.keys.has('KeyE'));}
-function releaseUnheld(index){if(!hookHeld(index))player?.release(index);}
+function releaseUnheld(index){if(!titanMode&&!hookHeld(index))player?.release(index);}
 function setupTouchStick(){
   const zone=$('touchMoveZone'),stick=$('moveStick'),knob=stick?.querySelector('span');
   if(!zone||!stick||!knob)return;
@@ -273,7 +285,7 @@ function setupTouchLookZone(){
     event.preventDefault();
     const delta=lookDragDelta(event.clientX-mobileInput.lastX,event.clientY-mobileInput.lastY);
     mobileInput.lastX=event.clientX;mobileInput.lastY=event.clientY;
-    player.yaw+=delta.yaw;player.pitch+=delta.pitch;
+    const controller=titanMode?titanPlayer:player;controller.yaw+=delta.yaw;controller.pitch+=delta.pitch;
   });
   for(const type of ['pointerup','pointercancel','lostpointercapture'])zone.addEventListener(type,stop);
 }
@@ -282,6 +294,13 @@ function setupTouchButton(button){
   const set=(pressed)=>{
     if(!started||paused||finished)return;
     button.classList.toggle('active',pressed);
+    if(titanMode){
+      if(action==='attack'&&pressed)bladeStrike();
+      if(action==='aspect'&&pressed)activateSelectedAspect();
+      if(action==='jump'&&pressed)titanInputJump();
+      if(action==='boost')mobileKey('ShiftLeft',pressed);
+      return;
+    }
     if(action==='jump'){if(pressed&&player.grounded)input.jumpQueued=true;return;}
     if(player.grabbed&&(action==='attack'||action==='boost')){
       if(pressed){const status=player.escapeGrab();showToast(status.active?'ESCAPE GRAB · '+status.remaining+' INPUTS':'GRAB BROKEN');}
@@ -315,12 +334,20 @@ function setupTouchButton(button){
   const lift=()=>{if(action==='boost')mobileInput.boostPointer=null;set(false);};
   button.addEventListener('pointerup',lift);button.addEventListener('pointercancel',lift);button.addEventListener('lostpointercapture',lift);
 }
+function titanInputJump(){input.jumpQueued=true;}
 function setupTouchControls(){
   setupTouchStick();setupTouchLookZone();
   mobileControls?.querySelectorAll('[data-touch-action]').forEach(setupTouchButton);
 }
-function showMissionBoard(){updateMissionBoard();menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.remove('hidden');}
+function showMissionBoard(){
+  $('titanSelect').classList.add('hidden');updateMissionBoard();menu.classList.add('hidden');pause.classList.add('hidden');complete.classList.add('hidden');missionSelect.classList.remove('hidden');}
 function attachEvents(){
+  const titanCards=$('titanCards');
+  for(const id of TITAN_ORDER){const form=TITAN_FORMS[id],button=document.createElement('button');button.type='button';button.className='titan-card';button.dataset.titan=id;
+    button.innerHTML=`<strong>${form.name}</strong><small>${form.height} M · HP ${form.health} · SPEED ${form.speed}</small><em>${form.special}</em>`;
+    button.onclick=()=>startTitan(id);titanCards.appendChild(button);}
+  $('titanSelectButton').onclick=()=>{menu.classList.add('hidden');$('titanSelect').classList.remove('hidden');};
+  $('titanBackButton').onclick=()=>{$('titanSelect').classList.add('hidden');menu.classList.remove('hidden');};
   $('startButton').onclick=()=>startFresh('course');$('practiceButton').onclick=()=>startFresh('free');$('missionSelectButton').onclick=showMissionBoard;
   $('missionsBackButton').onclick=()=>{missionSelect.classList.add('hidden');menu.classList.remove('hidden');};
   missionSelect.querySelectorAll('[data-mission]').forEach((button)=>{button.onclick=()=>startFresh(button.dataset.mission);});
@@ -355,8 +382,8 @@ function attachEvents(){
     if(!started||paused||finished)return;
     if(document.pointerLockElement!==canvas&&(document.activeElement!==canvas||!event.buttons))return;
     const sensitivity=.00225;
-    player.yaw-=event.movementX*sensitivity;
-    player.pitch-=event.movementY*sensitivity;
+    const controller=titanMode?titanPlayer:player;controller.yaw-=event.movementX*sensitivity;
+    controller.pitch-=event.movementY*sensitivity;
   });
   canvas.addEventListener('mousedown',(event)=>{
     const action=captureClickAction(mouseCaptureState());
@@ -368,8 +395,8 @@ function attachEvents(){
       // Do NOT fire a hook on the click used to regain mouse control.
       return;
     }
-    if(event.button===0){input.mouse.left=true;if(player.fire(0))playBeep();}
-    else if(event.button===2){input.mouse.right=true;if(player.fire(1))playBeep();}
+    if(event.button===0){input.mouse.left=true;if(titanMode)bladeStrike();else if(player.fire(0))playBeep();}
+    else if(event.button===2){input.mouse.right=true;if(titanMode)activateSelectedAspect();else if(player.fire(1))playBeep();}
   });
   document.addEventListener('mouseup',(event)=>{
     if(event.button===0){input.mouse.left=false;releaseUnheld(0);}
@@ -389,12 +416,13 @@ function attachEvents(){
     if(event.code==='KeyH'&&started&&!finished){if(document.pointerLockElement===canvas)document.exitPointerLock();halt();return;}
     if(!started||paused||finished)return;
     if(document.pointerLockElement!==canvas&&document.activeElement!==canvas)return;
-    if(player.grabbed&&(event.code==='KeyF'||event.code==='Space')){
+    if(!titanMode&&player.grabbed&&(event.code==='KeyF'||event.code==='Space')){
       if(!event.repeat){const escape=player.escapeGrab(event.code,gameTime);showToast(escape.active?'ESCAPE THE GRAB · '+escape.remaining+' INPUTS':'GRAB BROKEN · KEEP MOVING');}
       return;
     }
     if(!input.keys.has(event.code)){
-      if(event.code==='Space'&&player.grounded)input.jumpQueued=true;
+      if(event.code==='Space'&&(titanMode?titanPlayer.grounded:player.grounded))input.jumpQueued=true;
+      if(titanMode){if(event.code==='KeyF')bladeStrike();if(event.code==='KeyX'||event.code==='KeyB')activateSelectedAspect();if(event.code==='KeyM')$('mapPanel').classList.toggle('hidden');if(event.code==='KeyR')startTitan(selectedTitan);if(event.code==='KeyP')savePhoto();if(event.code==='F3'){$('diagnostics').classList.toggle('hidden');}input.keys.add(event.code);return;}
       if(event.code==='KeyQ'){if(player.fire(0))playBeep();}
       if(event.code==='KeyE'){if(player.fire(1))playBeep();}
       if(event.code==='KeyV'){player.firstPerson=!player.firstPerson;showToast(player.firstPerson?'FIRST-PERSON CAMERA':'THIRD-PERSON CAMERA');}
@@ -449,6 +477,7 @@ function updateMission(dt){
   if(missionMode==='survival'&&elapsed>=90)completeMission(true);
 }
 function hudUpdate(){
+  if(titanMode)return titanHudUpdate();
   $('speed').textContent=String(Math.round(player.speed*3.6)).padStart(3,'0');
   $('altitude').textContent=String(Math.max(0,Math.round(player.position.y-1))).padStart(3,'0');
   $('gasPercent').textContent=Math.round(player.gas)+'%';$('gasFill').style.width=Math.round(player.gas)+'%';
@@ -489,6 +518,22 @@ function hudUpdate(){
   navigation.update(courseIndex,practice,enemies.enemies,active);
   if(debugVisible)$('diagnostics').textContent=`POSITION ${player.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nSPEED ${player.speed.toFixed(1)} m/s · ${player.grounded?'GROUNDED':'AIRBORNE'}\nHOOKS ${player.hooks.map((h,i)=>h?`${i?'R':'L'} ${h.point.distanceTo(player.position).toFixed(1)}/${h.length.toFixed(1)}m`:`${i?'R':'L'} OFF`).join(' · ')}\nCAMERA ${camera.position.toArray().map(n=>n.toFixed(1)).join(' / ')}\nRECOVERIES ${player.recoveries} · DRAW CALLS ${renderer.info.render.calls}`;
 }
+function titanHudUpdate(){
+  const t=titanPlayer,form=t.form;if(!form)return;
+  $('speed').textContent=String(Math.round(t.speed*3.6)).padStart(3,'0');
+  $('altitude').textContent=String(Math.max(0,Math.round(t.position.y))).padStart(3,'0');
+  $('healthValue').textContent=Math.ceil(t.health)+' HP';$('healthFill').style.width=(t.health/form.health*100)+'%';
+  $('gasPercent').textContent='TITAN';$('timer').textContent=formatTime(elapsed);
+  $('missionText').textContent=form.name.toUpperCase()+' · TITAN SHIFTER MODE';
+  $('aspectName').textContent=form.special.toUpperCase();$('aspectDescription').textContent=t.cooldown?Math.ceil(t.cooldown)+' S RECHARGE':'SPECIAL READY';
+  $('aspectKey').textContent='X · SPECIAL';$('aspectFill').style.width=(1-t.cooldown/form.cooldown)*100+'%';
+  $('beaconDistance').textContent='--';$('checkpointNumber').textContent='09';
+  $('reticleText').textContent='F / TAP · STRIKE   |   X · SPECIAL';
+  $('threatCount').textContent=String(enemies.living()).padStart(2,'0');
+  $('vertical').textContent=t.grounded?'GROUND':'AIR';
+  $('bearingLabel').textContent=['N','NE','E','SE','S','SW','W','NW'][Math.round(((-t.yaw%(Math.PI*2)+Math.PI*2)%(Math.PI*2))/(Math.PI/4))%8];
+  $('trialButton').classList.add('hidden');$('reticle').classList.remove('available');
+}
 const PHYSICS_STEP=1/240;
 let prevTime=0,accumulator=0,physicsTick=0,worldTime=0;
 function loop(ms){
@@ -500,8 +545,15 @@ function loop(ms){
     accumulator+=dt;
     let steps=0;
     while(accumulator>=PHYSICS_STEP&&steps<16){
-      player.yaw+=(Number(input.keys.has('ArrowLeft'))-Number(input.keys.has('ArrowRight')))*.018*(PHYSICS_STEP/.01);
-      player.pitch+=(Number(input.keys.has('ArrowUp'))-Number(input.keys.has('ArrowDown')))*.013*(PHYSICS_STEP/.01);
+      const controller=titanMode?titanPlayer:player;
+      controller.yaw+=(Number(input.keys.has('ArrowLeft'))-Number(input.keys.has('ArrowRight')))*.018*(PHYSICS_STEP/.01);
+      controller.pitch+=(Number(input.keys.has('ArrowUp'))-Number(input.keys.has('ArrowDown')))*.013*(PHYSICS_STEP/.01);
+      if(titanMode){
+        titanPlayer.update(PHYSICS_STEP,input,gameTime);physicsTick++;
+        if(physicsTick%5===0){const danger=enemies.update(PHYSICS_STEP*5,titanPlayer.position,worldTime);if(danger.damage){const result=titanPlayer.takeDamage(danger.damage);if(result.downed){showToast('TITAN DEFEATED · REDEPLOY');startTitan(selectedTitan);}}}
+        if(!finished)elapsed+=PHYSICS_STEP;
+        accumulator-=PHYSICS_STEP;steps++;continue;
+      }
       // Mobile camera orientation changes on drag events, not fixed joystick ticks.
       // Holding a missed hook retries as the reticle moves onto a building;
       // simultaneous keyboard + mouse binds remain independently attached.
@@ -532,8 +584,8 @@ function loop(ms){
       if(paused||finished){accumulator=0;break;}
     }
     if(steps>=16)accumulator=0;
-    player.updateCamera(dt);
-    if(player.recoveries>lastRecovery){lastRecovery=player.recoveries;clearInputs();showToast('FLIGHT RECOVERED · REDEPLOYED TO CENTRAL PLAZA');}
+    if(titanMode)titanPlayer.updateCamera(dt);else player.updateCamera(dt);
+    if(!titanMode&&player.recoveries>lastRecovery){lastRecovery=player.recoveries;clearInputs();showToast('FLIGHT RECOVERED · REDEPLOYED TO CENTRAL PLAZA');}
     if(gameTime-lastHud>.08){hudUpdate();lastHud=gameTime;}
   }else if(!started){
     // Bring the city architecture close enough to read through the title UI.
