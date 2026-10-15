@@ -6,7 +6,7 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 export function createTitanPlayer(scene,world,camera,enemies){
   let rig=null,form=null,health=0,cooldown=0,attackDelay=0,specialTimer=0,active=false;
   const position=V(),velocity=V(),target=V(),dummy={
-    id:'human-shifter',position,alive:true,moving:0,state:'patrol',attackPhase:'idle',
+    id:'human-shifter',position,alive:true,moving:0,sprinting:false,state:'patrol',attackPhase:'idle',
     armLeft:0,armRight:0,stagger:0,speed:4
   };
   let yaw=0,pitch=-.13,gaitTime=0,jumpVelocity=0,grounded=true;
@@ -16,7 +16,7 @@ export function createTitanPlayer(scene,world,camera,enemies){
     form=TITAN_FORMS[id];health=form.health;cooldown=attackDelay=specialTimer=0;
     position.copy(spawn);position.y=world.terrainHeight?.(position.x,position.z)??0;
     yaw=0;pitch=-.13;velocity.set(0,0,0);jumpVelocity=0;grounded=true;
-    dummy.speed=form.speed;dummy.type=id;dummy.alive=true;dummy.moving=0;
+    dummy.speed=form.speed;dummy.type=id;dummy.alive=true;dummy.moving=0;dummy.sprinting=false;
     rig=createVoxelTitanRig(scene,dummy,{height:form.height,color:form.color});
     rig.group.traverse(node=>{if(node.isSprite)node.visible=false;});
     // Nape and alert are AI-only hit indicators.
@@ -75,6 +75,8 @@ export function createTitanPlayer(scene,world,camera,enemies){
     target.copy(forward).multiplyScalar(z).addScaledVector(right,x);
     const walking=target.lengthSq()>.01;
     const sprint=input.keys.has('ShiftLeft')||input.keys.has('ShiftRight');
+    // Native Armored run animation is opt-in: hold Shift *while* moving.
+    dummy.sprinting=sprint&&walking;
     const speed=form.speed*(sprint?1.28:1);
     const acceleration=clamp(dt*8,0,1);
     velocity.x+=(target.x*speed-velocity.x)*acceleration;

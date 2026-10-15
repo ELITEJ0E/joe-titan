@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import {createArmoredNative,updateArmoredNative} from './armored-native-rig.js';
+import {createArmoredNative,updateArmoredNative,disposeArmoredNative} from './armored-native-rig.js';
 
 // Uploaded user meshes are unrigged and have no source animations.
 // Build a lightweight per-vertex skeletal skin, then animate it at runtime.
@@ -15,9 +15,15 @@ export const TITAN_GLB_PATHS=Object.freeze({
  warhammer:'/models/titans/war_hammer_titan.glb',
  founding:'/models/titans/founding_titan.glb'
 });
+export const ARMORED_IDLE_PATH='/models/titans/armored_idle.glb';
 const loader=new GLTFLoader(),cache=new Map(),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function load(kind){
  if(!cache.has(kind))cache.set(kind,loader.loadAsync(TITAN_GLB_PATHS[kind]).catch(e=>{cache.delete(kind);throw e;}));
+ return cache.get(kind);
+}
+function loadArmoredIdle(){
+ const kind='armoredIdle';
+ if(!cache.has(kind))cache.set(kind,loader.loadAsync(ARMORED_IDLE_PATH).catch(e=>{cache.delete(kind);throw e;}));
  return cache.get(kind);
 }
 function bone(name,x,y,z,parent){
@@ -131,9 +137,10 @@ export function animateTitanGLB(rig,enemy,dt,time){
 export function attachTitanGLB(rig,kind){
  if(typeof window==='undefined'||!TITAN_GLB_PATHS[kind])return rig;
  rig.modelStatus='loading';
- rig.modelReady=load(kind).then(gltf=>{
+ const assetPromise=kind==='armored'?Promise.all([load(kind),loadArmoredIdle()]):load(kind).then(gltf=>[gltf,null]);
+ rig.modelReady=assetPromise.then(([gltf,idleGltf])=>{
   if(rig.disposed)return false;
-  const native=kind==='armored'?createArmoredNative(gltf):null;
+  const native=kind==='armored'?createArmoredNative(gltf,idleGltf):null;
   const skinned=native?{pivot:native.root,bones:null,skeleton:null}:skinnedVisual(gltf,kind);
   // Prevent the old blocky meshes from displaying behind the actual character.
   rig.group.traverse(obj=>{if(obj.isMesh&&obj.geometry?.type!=='CircleGeometry')obj.visible=false;});
@@ -152,5 +159,10 @@ export function attachTitanGLB(rig,kind){
 }
 export function preloadTitanGLBs(kinds=Object.keys(TITAN_GLB_PATHS)){
  if(typeof window==='undefined')return Promise.resolve([]);
- return Promise.allSettled(kinds.map(load));
+ return Promise.allSettled([...kinds.map(load),...(kinds.includes('armored')?[loadArmoredIdle()]:[])]);
+}
+
+// Release the native Armored Titan's mixer and private materials when switching modes.
+export function disposeTitanGLBVisual(rig){
+ if(rig.nativeArmored){disposeArmoredNative(rig.nativeArmored);rig.nativeArmored=null;}
 }

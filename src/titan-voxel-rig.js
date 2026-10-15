@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {enhanceTitanRig,TITAN_FORMS} from './titan-forms.js';
-import {attachTitanGLB,animateTitanGLB} from './titan-glb-models.js';
+import {attachTitanGLB,animateTitanGLB,disposeTitanGLBVisual} from './titan-glb-models.js';
 
 // Original Minecraft-style Titan rig. All dimensions are fractions of height;
 // the front faces local -Z and the nape is on the opposite (+Z) side.
@@ -194,6 +194,7 @@ export function animateVoxelTitanRig(rig,enemy,dt,time=0){
 
 export function disposeVoxelTitanRig(scene,rig){
   rig.disposed=true;
+  disposeTitanGLBVisual(rig);
   scene.remove(rig.group);
   for(const marker of [rig.weak,rig.alert]){
     marker.material.map?.dispose();marker.material.dispose();
