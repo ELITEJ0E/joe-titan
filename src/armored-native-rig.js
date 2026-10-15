@@ -88,6 +88,10 @@ export function updateArmoredNative(rig,enemy,dt){
     if(animated){
       native.runAction.reset();
       native.runAction.play();
+      // Start from the correct walking cadence immediately; interpolating
+      // from the clip's default 1x rate caused an accidental running burst.
+      native.runAction.setEffectiveTimeScale(pose.rate);
+      native.runAction.setEffectiveWeight(pose.weight);
     }
   }
   // The uploaded native rig supplies a run cycle but no independent walk
