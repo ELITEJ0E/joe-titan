@@ -105,9 +105,18 @@ uniform float uNormalStrength;
 uniform vec3 uSunDir,uSunTint,uSkyTint,uFogColor,uHorizonTint,uZenithTint;
 uniform float uTime,uFogNear,uFogFar,uCloudShadow,uEdgeAO,uSunShadow;
 uniform float uSunStrength,uFogStrength,uWetness;
+uniform int uBlastCount;
+uniform vec4 uBlastVolumes[24];
 varying float vTile;varying float vShadow;varying float vAO;
 varying vec2 vUV;varying vec3 vWorld;varying vec3 vNormal;
 void main(){
+ // Blast volumes remove the visual surface while the underlying voxel array
+ // is cleared for raycasts and character collisions. No full map remesh.
+ for(int i=0;i<24;i++){
+  if(i>=uBlastCount)break;
+  vec3 offset=vWorld-uBlastVolumes[i].xyz;
+  if(dot(offset,offset)<uBlastVolumes[i].w*uBlastVolumes[i].w)discard;
+ }
  vec2 tile=vec2(mod(vTile,8.),floor(vTile/8.));
  vec2 uv=fract(vUV+.00001);
  vec2 atlasUV=(tile+vec2(.02)+uv*.96)/vec2(8.,4.);
@@ -194,7 +203,8 @@ export function createShiganshinaVisuals(scene,colors,mode='performance'){
    uFogColor:{value:sample.fog.clone()},uTime:{value:0},
    uHorizonTint:{value:sample.horizon.clone()},uZenithTint:{value:sample.zenith.clone()},
    uSunStrength:{value:sample.sunStrength},uFogStrength:{value:sample.fogStrength},uWetness:{value:sample.wetness},
-   uFogNear:{value:125},uFogFar:{value:390},uCloudShadow:{value:0},uEdgeAO:{value:0},uSunShadow:{value:0}
+   uFogNear:{value:125},uFogFar:{value:390},uCloudShadow:{value:0},uEdgeAO:{value:0},uSunShadow:{value:0},
+   uBlastCount:{value:0},uBlastVolumes:{value:Array.from({length:24},()=>new THREE.Vector4(0,-10000,0,0))}
  };
  const material=new THREE.ShaderMaterial({uniforms,vertexShader:vs,fragmentShader:fs,side:THREE.FrontSide,toneMapped:true});
  // Water-only quads use the SAME baked AO/atlas/sun/fog shader uniforms but
