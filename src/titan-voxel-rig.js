@@ -145,7 +145,7 @@ export function smoothVoxelJoint(node,x,y,z,dt,response=12){
 export function animateVoxelTitanRig(rig,enemy,dt,time=0){
   const moving=clamp(enemy.moving||0,0,1),alerted=['pursue','windup','lunge','strike','recover'].includes(enemy.state);
   const speed=enemy.speed||3;
-  if(moving>0.03)rig.gait+=dt*speed*2.2*clamp(moving,.25,1);
+  if(moving>0.03)rig.gait+=dt*(enemy.cycleRate||Math.max(.7,speed*.48))*Math.PI*2*clamp(moving,.2,1);
   const walk=Math.sin(rig.gait)*.53*moving;
   const breathing=Math.sin(time*1.5+rig.height)*.014;
   const phase=enemy.attackPhase||'idle';

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
+import {armoredClipPose} from './titan-gait.js';
 
 // Armored Titan has two real GLBs:
 // - original colored model (rest / normal movement)
@@ -78,25 +79,33 @@ export function createArmoredNative(runGltf,idleGltf){
 export function updateArmoredNative(rig,enemy,dt){
   const native=rig.nativeArmored;
   if(!native)return;
-  const running=shouldUseArmoredRun(enemy)&&!!native.runAction;
-  if(running!==native.running){
-    native.running=running;
-    native.idle.visible=!running;
-    native.run.visible=running;
-    // Rest the running clip at its beginning for each new sprint. It cannot
-    // deform the normal standing GLB because those are independent meshes.
-    if(running){
+  const pose=armoredClipPose(enemy,!!native.runAction);
+  const animated=pose.mode!=='idle';
+  if(animated!==native.running){
+    native.running=animated;
+    native.idle.visible=!animated;
+    native.run.visible=animated;
+    if(animated){
       native.runAction.reset();
       native.runAction.play();
+      // Start from the correct walking cadence immediately; interpolating
+      // from the clip's default 1x rate caused an accidental running burst.
+      native.runAction.setEffectiveTimeScale(pose.rate);
+      native.runAction.setEffectiveWeight(pose.weight);
     }
   }
-  if(running){
-    const speed=enemy.id==='human-shifter'?1:THREE.MathUtils.clamp((enemy.speed||7)/9,.65,1.4);
+  // The uploaded native rig supplies a run cycle but no independent walk
+  // clip. Use a slower, subdued version of the same clip for actual walking,
+  // retaining the original idle mesh when stationary.
+  if(animated){
+    const change=1-Math.exp(-Math.max(0,dt)*5.2);
+    const speed=THREE.MathUtils.lerp(native.runAction.getEffectiveTimeScale(),pose.rate,change);
+    const weight=THREE.MathUtils.lerp(native.runAction.getEffectiveWeight(),pose.weight,change);
     native.runAction.setEffectiveTimeScale(speed);
+    native.runAction.setEffectiveWeight(weight);
     native.mixer.update(Math.max(0,dt));
   }
-  // No full-body rotation or AnimationMixer updates to the idle model.
-  native.idle.position.y=!running?Math.sin(rig.gait*2)*.002*(enemy.moving||0):0;
+  native.idle.position.y=!animated?Math.sin(rig.gait*2)*.002*(enemy.moving||0):0;
 }
 
 export function disposeArmoredNative(native){

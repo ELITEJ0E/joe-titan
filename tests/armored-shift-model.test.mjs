@@ -37,7 +37,7 @@ test('only Shift plus movement triggers the player sprint mesh',()=>{
  assert.equal(shouldUseArmoredRun({id:'human-shifter',moving:.5,sprinting:true}),true);
  assert.equal(shouldUseArmoredRun({id:'human-shifter',moving:.5}),false);
 });
-test('switching between rest and run models does not animate the standing mesh',()=>{
+test('Armored uses stationary idle, animated walk and full sprint on rigged model',()=>{
  const native=createArmoredNative(fakeGLTF(true),fakeGLTF(false));
  const rig={nativeArmored:native,gait:2};
  const actor={id:'human-shifter',moving:0,sprinting:false,speed:12};
@@ -49,16 +49,18 @@ test('switching between rest and run models does not animate the standing mesh',
  assert.equal(native.run.visible,false);
  actor.moving=.8;
  updateArmoredNative(rig,actor,.016);
- assert.equal(native.idle.visible,true);
- assert.equal(native.run.visible,false);
+ assert.equal(native.idle.visible,false);
+ assert.equal(native.run.visible,true);
+ const walkSpeed=native.runAction.getEffectiveTimeScale();
  actor.sprinting=true;
  updateArmoredNative(rig,actor,.05);
  assert.equal(native.idle.visible,false);
  assert.equal(native.run.visible,true);
+ assert.ok(native.runAction.getEffectiveTimeScale()>walkSpeed);
  actor.sprinting=false;
  updateArmoredNative(rig,actor,.016);
- assert.equal(native.idle.visible,true);
- assert.equal(native.run.visible,false);
+ assert.equal(native.idle.visible,false);
+ assert.equal(native.run.visible,true);
  actor.sprinting=true;
  actor.moving=0;
  updateArmoredNative(rig,actor,.016);

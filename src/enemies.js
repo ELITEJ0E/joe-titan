@@ -5,6 +5,7 @@ import {severTitanArm,canTitanSwipe,titanSwipeDamage} from './titan-limbs.js';
 import {createVoxelTitanRig,animateVoxelTitanRig} from './titan-voxel-rig.js';
 import {chooseNapeArcTarget,BLADE_ARC} from './scout-blade-arc.js';
 import {chooseTitanSteering,crowdSeparation} from './titan-navigation.js';
+import {gaitForTitan} from './titan-gait.js';
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const V=(x,y,z)=>new THREE.Vector3(x,y,z);
@@ -43,7 +44,7 @@ export function createEnemySimulation(spawns=[],world=null){
   const enemies=spawns.map((spawn,index)=>{
     const type=TYPES[spawn.type]||TYPES.wanderer,position=V(...spawn.position);
     return {id:spawn.id||`riftborn-${index}`,type:spawn.type||'wanderer',height:type.height,maxHealth:type.health,health:type.health,
-      speed:type.speed,shifter:!!type.shifter,napeHP:segmentNapeHealth(type.health),armRight:0,armLeft:0,
+      speed:type.speed,locomotionSpeed:0,cycleRate:1,sprinting:false,shifter:!!type.shifter,napeHP:segmentNapeHealth(type.health),armRight:0,armLeft:0,
       position,spawnPosition:position.clone(),patrol:V(...(spawn.patrol||spawn.position)),
       forward:V(0,0,-1),state:'patrol',alive:true,attack:0,stagger:0,
       attackPhase:'idle',phaseTime:0,patrolGoal:1,loiter:0,moving:0,flash:0,
@@ -54,6 +55,7 @@ export function createEnemySimulation(spawns=[],world=null){
       e.position.copy(e.spawnPosition);e.health=e.maxHealth;e.napeHP=segmentNapeHealth(e.maxHealth);
       e.armRight=e.armLeft=0;e.alive=true;e.state='patrol';e.attack=0;e.stagger=0;
       e.attackPhase='idle';e.phaseTime=0;e.patrolGoal=1;e.loiter=0;e.moving=0;e.flash=0;
+      e.locomotionSpeed=0;e.cycleRate=1;e.sprinting=false;
       e.zigzagTime=.6+(enemies.indexOf(e)%4)*.19;e.zigzagSign=enemies.indexOf(e)%2?1:-1;
       e.forward.set(0,0,-1);
     }
@@ -68,7 +70,7 @@ export function createEnemySimulation(spawns=[],world=null){
       const target=decoyPosition||playerPosition;
       const offset=target.clone().sub(e.position);offset.y=0;
       const distance=offset.length();
-      e.moving=0;
+      e.moving=0;e.sprinting=false;
       if(e.stagger>0){
         e.state='stagger';e.attackPhase='idle';e.phaseTime=0;continue;
       }
@@ -145,10 +147,18 @@ export function createEnemySimulation(spawns=[],world=null){
         e.state='windup';continue;
       }
       const stop=pursuing?3.5:.7;
+      const gait=gaitForTitan(e,{pursuing,remaining});
+      e.cycleRate=gait.cycleRate;
+      // Smoothly accelerate when starting/changing gait instead of
+      // snapping from stationary to a running-speed walking pose.
+      const targetSpeed=remaining>stop&&canMove?gait.speed*slow:0;
+      e.locomotionSpeed+=(targetSpeed-e.locomotionSpeed)*
+        (1-Math.exp(-dt*(gait.running?3.9:4.8)));
       if(remaining>stop&&canMove){
-        const travel=Math.min(remaining-stop,e.speed*slow*dt);
+        const travel=Math.min(remaining-stop,e.locomotionSpeed*dt);
         e.position.addScaledVector(e.forward,travel);
-        e.moving=clamp(travel/Math.max(.0001,e.speed*dt),0,1);
+        e.moving=clamp(travel/Math.max(.0001,gait.speed*dt),0,1);
+        e.sprinting=gait.running&&e.moving>.12;
       }
       if(canMove)e.position.add(crowdSeparation(e,enemies,dt));
       e.position.x=clamp(e.position.x,-181,181);
