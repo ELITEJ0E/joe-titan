@@ -31,7 +31,7 @@ export function createTitanPlayer(scene,world,camera,enemies){
   function heading(){return V(-Math.sin(yaw),0,-Math.cos(yaw));}
   function hitEnemies(damage,reach,arc=.5){
     if(!rig)return 0;
-    let hits=0,forward=heading();
+    let hits=0,forward=V(-Math.sin(bodyYaw),0,-Math.cos(bodyYaw));
     for(const e of enemies.enemies){
       if(!e.alive)continue;
       const diff=e.position.clone().sub(position),flat=V(diff.x,0,diff.z),dist=flat.length();
