@@ -154,6 +154,8 @@ export function createScoutAvatarModel(scene,{remote=false}={}){
 }
 export function createPlayer(scene,world,camera){
   const model=avatar(scene);
+  // Camera-attached meshes render only if the camera belongs to the scene graph.
+  if(!camera.parent)scene.add(camera);
   const fpsWeapons=createFirstPersonSwords(camera);
   const form=new THREE.Group();const formMat=new THREE.MeshBasicMaterial({color:0x82e8ff,transparent:true,opacity:.18,depthWrite:false,blending:THREE.AdditiveBlending});
   const formBody=new THREE.Mesh(new THREE.CapsuleGeometry(.72,2.1,5,10),formMat);formBody.position.y=1.75;form.add(formBody);
