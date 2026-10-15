@@ -8,6 +8,7 @@ import {pilotPoseTargets} from './odm-pose.js';
 import {ODM_CABLE_SEGMENTS,writeODMCableCurve} from './odm-cable-visuals.js';
 import {aimODMArm} from './odm-arm-aim.js';
 import {updateStableFirstPersonCamera} from './odm-first-person-camera.js';
+import {MOBILE_ASSIST,mobileHookAssistance} from './mobile-flight-controls.js';
 import {GRAB_ESCAPE,createEscapeProgress,registerEscapePress} from './grab-escape.js';
 import {createScoutAttackState,beginScoutAttack,advanceScoutAttack,consumeScoutHit,resetScoutAttack,scoutAttackProgress,cubicEaseOut,SCOUT_ATTACK_TIMING} from './scout-combat-state.js';
 
@@ -227,8 +228,11 @@ export function createPlayer(scene,world,camera){
     if(input.keys.has('KeyD'))wish.add(right);
     if(input.keys.has('KeyA'))wish.sub(right);
     if(wish.lengthSq()>0)wish.normalize();
-    const reeling=input.keys.has('ShiftLeft')||input.keys.has('ShiftRight');
     const activeHooks=state.hooks.filter(Boolean).length;
+    const assist=mobileHookAssistance({mobileAssist:!!input.mobileAssist,activeHooks,
+      grounded:state.grounded,gas:state.gas,manualBoost:input.keys.has('Space')});
+    const reeling=input.keys.has('ShiftLeft')||input.keys.has('ShiftRight')||assist.reel;
+    if(assist.takeoff){state.grounded=false;state.velocity.y=Math.max(state.velocity.y,MOBILE_ASSIST.takeoffSpeed);}
     if(activeHooks)state.lastGearAt=state.flightClock;
     const movingForward=wish.dot(forward)>0.01;
     if(state.grounded&&!activeHooks){
@@ -244,15 +248,15 @@ export function createPlayer(scene,world,camera){
       // The speed-dependent reference drag is applied after all forces.
     }
     input.jumpQueued=false;
-    if(input.keys.has('Space')&&!state.grounded&&state.gas>0){
+    if(assist.boost&&!state.grounded&&state.gas>0){
       const moveX=Number(input.keys.has('KeyD'))-Number(input.keys.has('KeyA'));
       const moveY=Number(input.keys.has('KeyW'))-Number(input.keys.has('KeyS'));
       const inputScale=Math.max(1,Math.hypot(moveX,moveY));
       applyDirectionalGasBoost(state.velocity,state.yaw,state.pitch,moveX/inputScale,moveY/inputScale,dt,{
         acceleration:ODM_TUNING.boost,gravity:ODM_TUNING.gravity,
-        liftFactor:ODM_TUNING.boostVerticalGravity,multiplier:state.aspect?.boost||1
+        liftFactor:ODM_TUNING.boostVerticalGravity,multiplier:(state.aspect?.boost||1)*assist.boostMultiplier
       });
-      state.gas=Math.max(0,state.gas-ODM_TUNING.gasBoost*dt);state.boost=true;
+      state.gas=Math.max(0,state.gas-ODM_TUNING.gasBoost*dt*assist.gasCostMultiplier);state.boost=true;
     }else state.boost=false;
     state.braking=input.keys.has('KeyG')&&!state.grounded&&state.gas>0;
     if(state.braking){
@@ -269,7 +273,7 @@ export function createPlayer(scene,world,camera){
       state.position,state.velocity,state.hooks,dt,
       {reeling,gas:state.gas,reelMultiplier:state.aspect?.reel||1,forwardPump:movingForward}));
     for(const hook of state.hooks)if(hook)hook.age+=dt;
-    state.velocity.y-=ODM_TUNING.gravity*dt;
+    state.velocity.y-=ODM_TUNING.gravity*(state.aspect?.gravityScale||1)*dt;
     if(!state.grounded)applyReferenceAirDrag(state.velocity,dt);
     if(state.velocity.length()>ODM_TUNING.maxSpeed*(state.aspect?.speed||1))state.velocity.multiplyScalar(ODM_TUNING.maxSpeed*(state.aspect?.speed||1)/state.velocity.length());
     // Reference-style ropes do not pay out during boost. A taut rope
