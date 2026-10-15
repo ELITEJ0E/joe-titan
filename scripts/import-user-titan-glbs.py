@@ -28,7 +28,9 @@ PALETTES = {
 def bake(kind):
  path=OUT/(kind+'_titan.glb')
  source=path.with_suffix('.original.glb')
- urllib.request.urlretrieve(SOURCE[kind],source)
+ req=urllib.request.Request(SOURCE[kind],headers={'User-Agent':'JOE-Titan-Assets/1.0'})
+ with urllib.request.urlopen(req,timeout=35) as response:
+  source.write_bytes(response.read())
  scene=trimesh.load(source,force='scene',process=False)
  mesh=trimesh.util.concatenate(list(scene.geometry.values()))
  v=np.asarray(mesh.vertices,dtype=np.float64)
