@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {TITAN_FORMS} from './titan-forms.js';
 import {createVoxelTitanRig,animateVoxelTitanRig,disposeVoxelTitanRig} from './titan-voxel-rig.js';
+import {moveFacingYaw,orbitCameraPose,smoothFacingYaw} from './free-orbit-camera.js';
 const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 export function createTitanPlayer(scene,world,camera,enemies){
@@ -9,13 +10,13 @@ export function createTitanPlayer(scene,world,camera,enemies){
     id:'human-shifter',position,alive:true,moving:0,sprinting:false,state:'patrol',attackPhase:'idle',
     armLeft:0,armRight:0,stagger:0,speed:4
   };
-  let yaw=0,pitch=-.13,gaitTime=0,jumpVelocity=0,grounded=true;
+  let yaw=0,pitch=-.13,bodyYaw=0,gaitTime=0,jumpVelocity=0,grounded=true;
   function choose(id,spawn){
     if(!TITAN_FORMS[id])return false;
     dispose();
     form=TITAN_FORMS[id];health=form.health;cooldown=attackDelay=specialTimer=0;
     position.copy(spawn);position.y=world.terrainHeight?.(position.x,position.z)??0;
-    yaw=0;pitch=-.13;velocity.set(0,0,0);jumpVelocity=0;grounded=true;
+    yaw=0;bodyYaw=0;pitch=-.13;velocity.set(0,0,0);jumpVelocity=0;grounded=true;
     dummy.speed=form.speed;dummy.type=id;dummy.alive=true;dummy.moving=0;dummy.sprinting=false;
     rig=createVoxelTitanRig(scene,dummy,{height:form.height,color:form.color});
     rig.group.traverse(node=>{if(node.isSprite)node.visible=false;});
@@ -74,6 +75,8 @@ export function createTitanPlayer(scene,world,camera,enemies){
     const forward=heading(),right=V(-forward.z,0,forward.x);
     target.copy(forward).multiplyScalar(z).addScaledVector(right,x);
     const walking=target.lengthSq()>.01;
+    if(walking)bodyYaw=smoothFacingYaw(bodyYaw,
+      moveFacingYaw(yaw,x,z,{previousYaw:bodyYaw,moving:true}),dt,9);
     const sprint=input.keys.has('ShiftLeft')||input.keys.has('ShiftRight');
     // Native Armored run animation is opt-in: hold Shift *while* moving.
     dummy.sprinting=sprint&&walking;
@@ -108,7 +111,7 @@ export function createTitanPlayer(scene,world,camera,enemies){
       dummy.attackPhase='idle';dummy.state='patrol';
     }
     rig.group.position.copy(position);
-    rig.group.rotation.y=yaw;
+    rig.group.rotation.y=bodyYaw;
     animateVoxelTitanRig(rig,dummy,dt,time);
     rig.weak.visible=false;rig.alert.visible=false;
     if(rig.cart){
@@ -120,12 +123,16 @@ export function createTitanPlayer(scene,world,camera,enemies){
   function updateCamera(dt,snap=false){
     if(!active)return;
     const distance=clamp(form.height*1.55,12,105),height=clamp(form.height*.62,3,38);
-    const aim=position.clone().add(V(0,height,0));
-    const direction=V(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));
-    const desired=aim.clone().addScaledVector(direction,-distance).add(V(0,distance*.22,0));
+    // Camera can orbit behind, beside or in front of the Titan. Movement,
+    // not mouse turning, controls its body heading.
+    const pose=orbitCameraPose(position,yaw,pitch,{
+      distance,height,elevation:distance*.10
+    });
+    const aim=pose.focus,desired=pose.ideal;
     if(snap)camera.position.copy(desired);
     else camera.position.lerp(desired,1-Math.exp(-dt*7));
-    camera.lookAt(aim.clone().addScaledVector(direction,form.height*.7));
+    camera.up.set(0,1,0);
+    camera.lookAt(aim);
     const fov=clamp(67+form.height*.05,68,76);
     if(camera.fov!==fov){camera.fov=fov;camera.updateProjectionMatrix();}
   }
