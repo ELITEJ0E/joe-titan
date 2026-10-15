@@ -79,16 +79,43 @@ export function createVoxelSurfaceAtlas(){
 
 // A physical material with tactile texture for the instanced fallback city.
 // Geometry stays unchanged; this only replaces flat-looking Lambert shading.
-export function makeVoxelPBRMaterial(map,kind='stone'){
+
+export function makeVoxelNormalTile(kind='stone',seed=0){
+  const type=/roof|tile|slate/.test(kind)?'roof':
+    /stone|rock|limestone|brick|road|cobble|trim/.test(kind)?'stone':
+    /wood|timber|plank/.test(kind)?'wood':
+    /grass|leaf|shrub|moss/.test(kind)?'plants':'plaster';
+  const size=64,rgba=new Uint8Array(size*size*4);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const v=(y+.5)/size,u=(x+.5)/size;
+    const dx=surfaceHeight((x+1.5)/size,v,type,seed)-
+      surfaceHeight((x-.5)/size,v,type,seed);
+    const dy=surfaceHeight(u,(y+1.5)/size,type,seed)-
+      surfaceHeight(u,(y-.5)/size,type,seed);
+    const nx=clamp(-dx*1.6,-.44,.44),ny=clamp(-dy*1.6,-.44,.44);
+    const nz=Math.sqrt(Math.max(.2,1-nx*nx-ny*ny)),len=Math.hypot(nx,ny,nz);
+    const index=(y*size+x)*4;
+    rgba[index]=Math.round((nx/len*.5+.5)*255);
+    rgba[index+1]=Math.round((ny/len*.5+.5)*255);
+    rgba[index+2]=Math.round((nz/len*.5+.5)*255);
+    rgba[index+3]=255;
+  }
+  const texture=new THREE.DataTexture(rgba,size,size,THREE.RGBAFormat);
+  texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+  texture.magFilter=texture.minFilter=THREE.NearestFilter;
+  texture.generateMipmaps=false;texture.colorSpace=THREE.NoColorSpace;
+  texture.needsUpdate=true;return texture;
+}
+
+export function makeVoxelPBRMaterial(map,kind='stone',seed=1){
   const roof=/roof|tile|slate/.test(kind),stone=/stone|rock|limestone|brick|road|cobble|trim/.test(kind);
   const wood=/wood|timber|plank/.test(kind),foliage=/grass|leaf|shrub|moss/.test(kind);
   const roughness=foliage?.91:roof?.73:wood?.78:stone?.83:.86;
   const material=new THREE.MeshStandardMaterial({map,roughness,metalness:.0,
     side:THREE.FrontSide});
-  if(!foliage){
-    // Reusing a single scaled luminance-as-height normal map per material is
-    // intentionally avoided: the map's color would be interpreted as normals.
-    material.normalMap=null;
+  if(kind!=='water'&&kind!=='glass'&&kind!=='glow'){
+    material.normalMap=makeVoxelNormalTile(kind,seed);
+    material.normalScale.set(.55,.55);
   }
   return material;
 }
