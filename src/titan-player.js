@@ -193,7 +193,7 @@ export function createTitanPlayer(scene,world,camera,enemies){
     get explosionCount(){return blastEffects.activeCount;},get cameraDistance(){return cameraDistance;},
     get active(){return active;},get form(){return form;},get position(){return position;},
     get velocity(){return velocity;},get speed(){return velocity.length();},get health(){return health;},
-    get cooldown(){return cooldown;},get grounded(){return grounded;},
+    get cooldown(){return cooldown;},get grounded(){return grounded;},get verticalSpeed(){return jumpVelocity;},
     get yaw(){return yaw;},set yaw(v){yaw=v;},
     get pitch(){return pitch;},set pitch(v){pitch=clamp(v,-.9,.75);}
   };
