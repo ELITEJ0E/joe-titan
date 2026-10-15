@@ -165,7 +165,7 @@ body.ackerman-active .vignette{opacity:.73;
   .graphics-menu-button{max-width:100%;padding:10px 12px}
   .grain{opacity:.04}
 }
-@media ((pointer:coarse) and (orientation:portrait)), ((max-width:650px) and (orientation:portrait)){
+@media (pointer:coarse) and (orientation:portrait), (max-width:650px) and (orientation:portrait){
   .mobile-controls:not(.hidden)::before{display:none!important;content:none!important}
   .mobile-controls .touch-stick,.mobile-controls .touch-actions{opacity:1}
   .touch-stick{width:78px;height:78px;left:9px;bottom:17px}
