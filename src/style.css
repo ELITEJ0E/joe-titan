@@ -65,3 +65,127 @@
   background:#101d2bdd;box-shadow:0 10px 28px #0007;text-shadow:0 1px 3px #000b}
 .capture-hint span{color:#ffc27c;padding-left:6px}
 body.mouse-locked #game,body.mouse-locked .hud{cursor:none}
+
+
+/* Mobile flight HUD v2: clear center view with a free-drag right hemisphere. */
+.mobile-pause-button{display:none}
+.touch-look-zone{position:absolute;inset:0 0 0 50%;z-index:0;pointer-events:auto;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.touch-stick{z-index:2}
+.touch-actions{z-index:3}
+body.ackerman-active .reticle-ring{border-color:#bce9ff;box-shadow:0 0 17px #7ec6f599}
+body.ackerman-active .aspect{border-color:#a9deffc9;box-shadow:0 0 15px #6cbafa33}
+body.ackerman-active .vignette{opacity:.73;
+  background:radial-gradient(ellipse at center,transparent 56%,#408fd236 100%)}
+@media (pointer:coarse),(max-width:900px){
+  .mobile-pause-button{display:grid;place-items:center;position:absolute;
+    right:max(9px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));
+    width:35px;height:35px;z-index:9;pointer-events:auto;
+    background:#102736b9;border:1px solid #d9eaf474;border-radius:10px;
+    color:#f8ebd5;font:900 20px/1 'Manrope',Arial,sans-serif;
+    box-shadow:0 3px 13px #0003;touch-action:manipulation}
+  .topbar{top:max(9px,env(safe-area-inset-top));left:max(11px,env(safe-area-inset-left));
+    right:max(50px,calc(env(safe-area-inset-right) + 48px));
+    justify-content:space-between;gap:6px;align-items:flex-start}
+  .brand,.hud-right,.city-label{display:none!important}
+  .mission{display:flex!important;min-width:0;max-width:min(48vw,215px);
+    padding:2px 0 2px 8px;border-left:2px solid #eabb82b7;
+    background:linear-gradient(90deg,#0b1b27a8,#0b1b2700)}
+  .mission small{font-size:6px;letter-spacing:.13em;opacity:.78}
+  .mission strong{font-size:9px;line-height:1.25;max-width:100%;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .network-badge{display:flex!important;min-width:0;margin-left:auto;
+    width:72px;max-width:17vw;padding:3px 5px;gap:1px;opacity:.65;
+    background:#09172293;border-color:#a1c4d02d;line-height:1.1}
+  .network-badge small{font-size:5px;letter-spacing:.04em}
+  .network-badge strong{font-size:8px;letter-spacing:.015em;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .network-badge span{font-size:6px;letter-spacing:0;white-space:nowrap}
+  .horizon,.copyright,.quickkeys,.reticle-label,.speed-details,.threat-panel,
+  .diagnostics,.practice-trial{display:none!important}
+  .left-info{display:block!important;top:50px;left:max(11px,env(safe-area-inset-left));
+    padding:4px 6px;border-left:1px solid #ffffff3b;
+    background:#091b28a1;opacity:.72;text-shadow:0 1px 4px #000a;
+    max-width:120px}
+  .left-info .label-kicker{font-size:6px;letter-spacing:.10em}
+  .left-info .checkpoint{font-size:29px;gap:4px;line-height:1}
+  .left-info .checkpoint span:last-child{font-size:16px}
+  .left-info .checkpoint .slash{font-size:14px}
+  .left-info .line-muted{font-size:7px;letter-spacing:0}
+  .left-info .small-rule{height:1px;width:75px;margin:4px 0}
+  .left-info .timer{font-size:19px;margin:1px 0}
+  .map-panel{right:max(8px,env(safe-area-inset-right));top:53px;
+    transform:none;width:94px;padding:4px;opacity:.50;
+    background:#091923b3;box-shadow:none;border-color:#a1c3d032}
+  .map-panel>div{font-size:5px;letter-spacing:0;padding:1px 0 3px}
+  .map-panel canvas{width:84px;height:84px;max-width:100%}
+  .map-panel small{display:none}
+  .bottom-hud{left:50%;right:auto;bottom:max(5px,env(safe-area-inset-bottom));
+    transform:translateX(-50%);width:min(28vw,188px);min-width:106px;
+    display:flex;gap:5px;align-items:flex-end;justify-content:center}
+  .speed-module{display:none}
+  .systems{width:100%;min-width:0;margin:0;background:#0b1b29a1;
+    padding:4px 6px;border:1px solid #c2e2ee34;border-radius:7px;opacity:.80}
+  .vitals>div:first-child{margin-bottom:2px}
+  .vitals .label-kicker,.gas-head .label-kicker{font-size:6px;letter-spacing:0}
+  .vitals strong,.gas-head strong{font-size:12px}
+  .health-track{height:3px;margin-bottom:4px}
+  .gas-head>div:first-child{margin-bottom:3px}
+  .gas-track{height:4px}
+  .aspect{margin-top:5px;min-height:29px;grid-template-columns:12px 1fr;
+    padding:3px;gap:4px;background:#102e3b9c}
+  .aspect-orb{width:9px;height:9px}
+  .aspect small,.aspect em{font-size:5px;letter-spacing:0}
+  .aspect b{font-size:8px;letter-spacing:0}
+  .aspect-key{display:none}
+  .aspect-track{height:2px}
+  .toast{top:18%;max-width:66vw;padding:7px 10px;letter-spacing:.02em}
+  .touch-stick{left:max(12px,env(safe-area-inset-left));bottom:max(15px,env(safe-area-inset-bottom));
+    width:90px;height:90px;box-shadow:inset 0 0 0 8px #112d3c66,0 5px 16px #0004;
+    border-color:#d8e8eb47;background:#091b2897}
+  .touch-stick span{width:34px;height:34px}
+  .touch-stick small{bottom:-13px;font-size:7px}
+  .look-stick{display:none!important}
+  .touch-actions{right:max(9px,env(safe-area-inset-right));
+    bottom:max(13px,env(safe-area-inset-bottom));width:min(27vw,194px);
+    min-width:151px;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+  .touch-btn{min-height:38px;font-size:8px;letter-spacing:0;border-radius:10px;
+    background:#102b3bc2;box-shadow:0 3px 9px #0005}
+  .touch-btn.boost{grid-column:span 2}
+  .touch-btn.aspect-btn{font-size:7px;letter-spacing:0}
+  .reticle{width:22px;height:22px}
+  .reticle-ring{width:17px;height:17px}
+  .reticle:before,.reticle:after{top:11px}
+  .pause .menu-shell{max-height:90dvh;overflow-y:auto;
+    width:min(440px,calc(100vw - 34px));margin-left:17px}
+  .pause .menu-controls{display:none}
+  .pause .pause-title{font-size:clamp(30px,8vh,54px)!important;margin:6px 0!important}
+  .pause .intro{font-size:11px;margin:5px 0 12px;line-height:1.4}
+  .pause .start,.pause .secondary{padding:11px 12px;font-size:10px;margin-top:7px}
+  .graphics-menu-button{max-width:100%;padding:10px 12px}
+  .grain{opacity:.04}
+}
+@media ((pointer:coarse) and (orientation:portrait)), ((max-width:650px) and (orientation:portrait)){
+  .mobile-controls:not(.hidden)::before{display:none!important;content:none!important}
+  .mobile-controls .touch-stick,.mobile-controls .touch-actions{opacity:1}
+  .touch-stick{width:78px;height:78px;left:9px;bottom:17px}
+  .touch-stick span{width:28px;height:28px}
+  .touch-actions{width:148px;min-width:0;right:7px;bottom:16px;gap:4px}
+  .touch-btn{min-height:37px;font-size:7px;border-radius:8px}
+  .bottom-hud{bottom:142px;left:50%;width:145px}
+  .left-info{top:48px}
+  .map-panel{top:49px;width:77px;right:6px}
+  .map-panel canvas{width:67px;height:67px}
+  .mission{max-width:49vw}
+  .toast{top:29%}
+}
+@media (pointer:coarse) and (max-height:360px) and (orientation:landscape){
+  .left-info{top:42px;padding:2px 4px}
+  .left-info .timer{font-size:16px}
+  .map-panel{width:74px;top:42px}
+  .map-panel canvas{width:64px;height:64px}
+  .touch-stick{width:75px;height:75px;bottom:9px}
+  .touch-actions{width:158px;min-width:0;bottom:8px}
+  .touch-btn{min-height:33px}
+  .bottom-hud{width:115px;bottom:6px}
+}
