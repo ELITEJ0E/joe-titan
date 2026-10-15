@@ -290,3 +290,14 @@ html,body{height:100%;height:100dvh;min-height:0}
 body.ackerman-active .ackerman-slowmo-overlay{display:block}
 body.ackerman-active .vignette{opacity:.87;
   background:radial-gradient(ellipse at center,#7556181a 30%,#251c0a8c 100%)}
+
+/* Suppress scrollbar tracks but preserve touch, keyboard and wheel scrolling. */
+#menu,#pause,#missionSelect,#complete,.overlay,.overlay .menu-shell,.overlay .mission-shell{
+  scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+#menu::-webkit-scrollbar,#pause::-webkit-scrollbar,#missionSelect::-webkit-scrollbar,
+#complete::-webkit-scrollbar,.overlay::-webkit-scrollbar,
+.overlay .menu-shell::-webkit-scrollbar,.overlay .mission-shell::-webkit-scrollbar{
+  width:0!important;height:0!important;display:none!important;background:transparent!important;
+}
