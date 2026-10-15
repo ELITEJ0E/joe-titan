@@ -115,7 +115,7 @@ void main(){
  for(int i=0;i<24;i++){
   if(i>=uBlastCount)break;
   vec3 offset=vWorld-uBlastVolumes[i].xyz;
-  if(dot(offset,offset)<uBlastVolumes[i].w*uBlastVolumes[i].w)discard;
+  if(vWorld.y>10. && dot(offset,offset)<uBlastVolumes[i].w*uBlastVolumes[i].w)discard;
  }
  vec2 tile=vec2(mod(vTile,8.),floor(vTile/8.));
  vec2 uv=fract(vUV+.00001);
