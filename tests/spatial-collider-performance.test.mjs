@@ -71,7 +71,7 @@ test('Titan update uses nearby colliders rather than scanning full world array',
  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera();
  const world={terrainHeight:()=>0,
    colliders:new Proxy([], {get(target,key){if(key===Symbol.iterator)throw Error('full collider iteration in Titan update');return Reflect.get(target,key);}}),
-   nearbyColliders:(position,radius)=>{assert.ok(radius>=2);return [];},
+   nearbyColliders:(position,radius)=>{assert.ok(radius>1);return [];},
    damageStructures:()=>({pieces:0,colliders:0})};
  const titan=createTitanPlayer(scene,world,camera,{enemies:[]});
  titan.choose('jaw',V());
