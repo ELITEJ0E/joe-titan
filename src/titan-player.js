@@ -96,7 +96,6 @@ export function createTitanPlayer(scene,world,camera,enemies){
     cooldown=Math.max(0,cooldown-dt);
     specialTimer=Math.max(0,specialTimer-dt);
     impactCooldown=Math.max(0,impactCooldown-dt);
-    blastEffects.update(dt);
     let x=Number(input.keys.has('KeyD'))-Number(input.keys.has('KeyA'));
     let z=Number(input.keys.has('KeyW'))-Number(input.keys.has('KeyS'));
     const length=Math.hypot(x,z)||1;x/=length;z/=length;
@@ -122,10 +121,12 @@ export function createTitanPlayer(scene,world,camera,enemies){
         Math.abs(position.x-box.x)<box.halfW+radiusForImpact(form.height)&&
         Math.abs(position.z-box.z)<box.halfD+radiusForImpact(form.height));
       if(near){
-        const broken=world.damageStructures?.(position,Math.min(17,Math.max(4,form.height*.29)),{
+        // A wall that is already destroyed still receives an impact probe;
+        // always rate-limit it rather than scanning every 1/240 second.
+        impactCooldown=.72;
+        world.damageStructures?.(position,Math.min(17,Math.max(4,form.height*.29)),{
           height:Math.min(14,form.height*.50)
         });
-        if(broken?.pieces>0)impactCooldown=.72;
       }
     }
     // Resolve horizontal obstacle volumes with Titan-sized radii.
@@ -159,13 +160,22 @@ export function createTitanPlayer(scene,world,camera,enemies){
     }
     rig.group.position.copy(position);
     rig.group.rotation.y=bodyYaw;
-    animateVoxelTitanRig(rig,dummy,dt,time);
+    gaitTime+=dt;
+  }
+  function renderUpdate(dt,time){
+    if(!active)return;
+    // Dedicated visual tick: 60ish render frames, not 240 physics substeps.
+    // The positional/collision solver above remains fixed-step accurate.
+    const frameDt=Math.max(0,Math.min(.075,dt));
+    blastEffects.update(frameDt);
+    animateVoxelTitanRig(rig,dummy,frameDt,time);
     rig.weak.visible=false;rig.alert.visible=false;
     if(rig.cart){
       rig.cart.body.position.y=.03+Math.abs(Math.sin(time*5))*.015*dummy.moving;
-      rig.cart.legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(time*9+i*Math.PI*.8)*.26*dummy.moving;});
+      rig.cart.legs.forEach((leg,i)=>{
+        leg.rotation.x=Math.sin(time*9+i*Math.PI*.8)*.26*dummy.moving;
+      });
     }
-    gaitTime+=dt;
   }
   function updateCamera(dt,snap=false){
     if(!active)return;
@@ -189,7 +199,7 @@ export function createTitanPlayer(scene,world,camera,enemies){
     return cameraDistance;
   }
   function takeDamage(amount){health=Math.max(0,health-amount);return {downed:health<=0};}
-  return {choose,dispose,update,updateCamera,adjustZoom,attack,special,takeDamage,
+  return {choose,dispose,update,renderUpdate,updateCamera,adjustZoom,attack,special,takeDamage,
     get explosionCount(){return blastEffects.activeCount;},get cameraDistance(){return cameraDistance;},
     get active(){return active;},get form(){return form;},get position(){return position;},
     get velocity(){return velocity;},get speed(){return velocity.length();},get health(){return health;},
