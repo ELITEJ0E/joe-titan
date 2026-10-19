@@ -77,8 +77,12 @@ test('Colossal creates an expanding mushroom cloud and damages nearby world stru
  assert.ok(calls.some(c=>c.r>=40));
  const count=scene.children.length;
  t.update(.6,input(),.6);
+ t.renderUpdate(.06,.6);
  assert.ok(scene.children.length>=count);
- t.update(5.4,input(),6);
+ for(let frame=0;frame<100;frame++){
+  t.update(.06,input(),.6+frame*.06);
+  t.renderUpdate(.06,.6+frame*.06);
+ }
  assert.equal(t.explosionCount,0);
  t.dispose();
 });
