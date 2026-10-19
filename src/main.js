@@ -640,7 +640,7 @@ function loop(ms){
   if(debugVisible&&gameTime-lastPerfHud>.35){
     lastPerfHud=gameTime;
     $('diagnostics').textContent=perfDiagnostics()+
-      (titanMode?`\\nTITAN \${titanPlayer.form?.name||''} · \${titanPlayer.position.toArray().map(v=>v.toFixed(0)).join(' / ')}`:'');
+      (titanMode?`\nTITAN ${titanPlayer.form?.name||''} · ${titanPlayer.position.toArray().map(v=>v.toFixed(0)).join(' / ')}`:'');
   }
   world.animate(worldTime,dt*ackermanWorldScale(aspectState));
   cutEffects?.update(dt);
