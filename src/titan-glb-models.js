@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 import {createArmoredNative,updateArmoredNative,disposeArmoredNative} from './armored-native-rig.js';
 
 // Uploaded user meshes are unrigged and have no source animations.
