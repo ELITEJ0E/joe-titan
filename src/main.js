@@ -458,7 +458,7 @@ function attachEvents(){
     }
     if(!input.keys.has(event.code)){
       if(event.code==='Space'&&(titanMode?titanPlayer.grounded:player.grounded))input.jumpQueued=true;
-      if(titanMode){if(event.code==='KeyF')bladeStrike();if(event.code==='KeyX'||event.code==='KeyB')activateSelectedAspect();if(event.code==='KeyM')$('mapPanel').classList.toggle('hidden');if(event.code==='KeyR')startTitan(selectedTitan);if(event.code==='KeyP')savePhoto();if(event.code==='F3'){$('diagnostics').classList.toggle('hidden');}input.keys.add(event.code);return;}
+      if(titanMode){if(event.code==='KeyF')bladeStrike();if(event.code==='KeyX'||event.code==='KeyB')activateSelectedAspect();if(event.code==='KeyM')$('mapPanel').classList.toggle('hidden');if(event.code==='KeyR')startTitan(selectedTitan);if(event.code==='KeyP')savePhoto();if(event.code==='F3'){event.preventDefault();debugVisible=!debugVisible;$('diagnostics').classList.toggle('hidden',!debugVisible);}input.keys.add(event.code);return;}
       if(event.code==='KeyZ'){if(player.fire(0))playBeep();}
       if(event.code==='KeyE'){if(player.fire(1))playBeep();}
       if(event.code==='KeyV'){player.firstPerson=!player.firstPerson;showToast(player.firstPerson?'FIRST-PERSON CAMERA':'THIRD-PERSON CAMERA');}
@@ -571,7 +571,13 @@ function titanHudUpdate(){
   $('trialButton').classList.add('hidden');$('reticle').classList.remove('available');
 }
 const PHYSICS_STEP=1/240;
-let prevTime=0,accumulator=0,physicsTick=0,worldTime=0;
+let prevTime=0,accumulator=0,physicsTick=0,worldTime=0,lastPerfHud=0;
+function perfDiagnostics(){
+  const r=renderer.info.render,m=renderer.info.memory;
+  return `ESTIMATED FPS ${Math.round(graphics?.getEstimatedFps?.()||0)} · RES SCALE ${Math.round(100*(graphics?.getResolutionScale?.()||1))}%
+DRAW CALLS ${r.calls} · TRIANGLES ${r.triangles} · GEOMETRIES ${m.geometries} · TEXTURES ${m.textures}
+VISUALS ${graphics?.getQuality?.()||'performance'} · F3 CLOSE`;
+}
 function loop(ms){
   requestAnimationFrame(loop);
   const seconds=ms*.001,dt=Math.min(prevTime?seconds-prevTime:.016,.06);prevTime=seconds;
@@ -630,10 +636,17 @@ function loop(ms){
     camera.lookAt(...intro.target);
     if(Math.abs(camera.fov-intro.fov)>.01){camera.fov=intro.fov;camera.updateProjectionMatrix();}
   }
+  if(started&&!paused&&!finished&&titanMode)titanPlayer.renderUpdate(dt,gameTime);
+  if(debugVisible&&gameTime-lastPerfHud>.35){
+    lastPerfHud=gameTime;
+    $('diagnostics').textContent=perfDiagnostics()+
+      (titanMode?`\nTITAN ${titanPlayer.form?.name||''} · ${titanPlayer.position.toArray().map(v=>v.toFixed(0)).join(' / ')}`:'');
+  }
   world.animate(worldTime,dt*ackermanWorldScale(aspectState));
   cutEffects?.update(dt);
   multiplayer?.render(dt);
   if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
-  if(graphics)graphics.render();else renderer.render(scene,camera);
+  if(graphics){graphics.render();if(started&&!paused&&!finished)graphics.tickFrame(dt);}
+  else renderer.render(scene,camera);
 }
 init().catch(error=>{console.error(error);$('startMessage').textContent='Unable to initialize 3D renderer: '+error.message;$('startButton').disabled=true;});

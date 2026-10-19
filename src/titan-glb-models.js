@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 import {createArmoredNative,updateArmoredNative,disposeArmoredNative} from './armored-native-rig.js';
 
 // Uploaded user meshes are unrigged and have no source animations.
@@ -16,7 +17,9 @@ export const TITAN_GLB_PATHS=Object.freeze({
  founding:'/models/titans/founding_titan.glb'
 });
 export const ARMORED_IDLE_PATH='/models/titans/armored_idle.glb';
-const loader=new GLTFLoader(),cache=new Map(),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const loader=new GLTFLoader(),cache=new Map(),preparedMeshes=new Map(),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+// Convert unrigged Meshy mesh vertex weights only once per Titan type,
+// then reuse that prepared geometry and material for other instances.
 function load(kind){
  if(!cache.has(kind))cache.set(kind,loader.loadAsync(TITAN_GLB_PATHS[kind]).catch(e=>{cache.delete(kind);throw e;}));
  return cache.get(kind);
@@ -104,12 +107,26 @@ function skinnedVisual(gltf,kind){
   });
   const skin=new THREE.SkinnedMesh(geo,mats.length===1?mats[0]:mats);
   skin.name='Animated Mesh / '+kind;
-  skin.castShadow=true;skin.receiveShadow=true;skin.frustumCulled=false;
+  skin.castShadow=false;skin.receiveShadow=true;skin.frustumCulled=true;
+  // Conservative animated bounds in normalized local rig units.
+  skin.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,.48,0),1.65);
   pivot.add(skin);
   skin.bind(skeleton);
  });
  if(!pivot.children.some(c=>c.isSkinnedMesh))throw Error('No skinnable meshes in GLB');
  return {pivot,bones,skeleton};
+}
+export function preparedTitanVisual(gltf,kind){
+ if(!preparedMeshes.has(kind))preparedMeshes.set(kind,skinnedVisual(gltf,kind));
+ const template=preparedMeshes.get(kind);
+ const pivot=cloneSkinned(template.pivot);
+ const skinned=pivot.children.find(obj=>obj.isSkinnedMesh);
+ if(!skinned)throw Error('Cached Titan skin missing skinned mesh');
+ const jointNames=['hips','torso','leftArm','leftFore','rightArm','rightFore',
+   'head','leftLeg','leftShin','rightLeg','rightShin'];
+ const bones={bones:skinned.skeleton.bones};
+ for(let i=0;i<jointNames.length;i++)bones[jointNames[i]]=skinned.skeleton.bones[i];
+ return {pivot,bones,skeleton:skinned.skeleton};
 }
 export function animateTitanGLB(rig,enemy,dt,time){
  if(rig.nativeArmored){updateArmoredNative(rig,enemy,dt);return;}
@@ -136,19 +153,21 @@ export function animateTitanGLB(rig,enemy,dt,time){
 }
 export function attachTitanGLB(rig,kind){
  if(typeof window==='undefined'||!TITAN_GLB_PATHS[kind])return rig;
+ if(rig.modelStatus==='loading'||rig.modelStatus==='loaded')return rig;
  rig.modelStatus='loading';
  const assetPromise=kind==='armored'?Promise.all([load(kind),loadArmoredIdle()]):load(kind).then(gltf=>[gltf,null]);
  rig.modelReady=assetPromise.then(([gltf,idleGltf])=>{
   if(rig.disposed)return false;
   const native=kind==='armored'?createArmoredNative(gltf,idleGltf):null;
-  const skinned=native?{pivot:native.root,bones:null,skeleton:null}:skinnedVisual(gltf,kind);
+  const skinned=native?{pivot:native.root,bones:null,skeleton:null}:preparedTitanVisual(gltf,kind);
   // Prevent the old blocky meshes from displaying behind the actual character.
-  rig.group.traverse(obj=>{if(obj.isMesh&&obj.geometry?.type!=='CircleGeometry')obj.visible=false;});
+  for(const obj of rig.fallbackMeshes||[])obj.visible=false;
   rig.group.add(skinned.pivot);
   rig.modelVisual=skinned.pivot;
   rig.modelSkeleton=native?null:skinned;
   rig.nativeArmored=native;
   rig.modelStatus='loaded';
+  rig.lodLevel='high';
   return true;
  }).catch(err=>{
   rig.modelStatus='fallback';
@@ -165,4 +184,10 @@ export function preloadTitanGLBs(kinds=Object.keys(TITAN_GLB_PATHS)){
 // Release the native Armored Titan's mixer and private materials when switching modes.
 export function disposeTitanGLBVisual(rig){
  if(rig.nativeArmored){disposeArmoredNative(rig.nativeArmored);rig.nativeArmored=null;}
+ // Skinned clones own Skeleton/bone textures, but NOT geometry/material
+ // buffers (those remain cached for subsequent Titans).
+ if(rig.modelSkeleton){
+  rig.modelSkeleton.skeleton.dispose();
+  rig.modelSkeleton=null;
+ }
 }

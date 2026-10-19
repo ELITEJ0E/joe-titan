@@ -3,6 +3,8 @@ import {napeHit,segmentNapeHealth} from './reference-combat.js';
 import {createTitanProjectiles,BOULDER} from './titan-projectiles.js';
 import {severTitanArm,canTitanSwipe,titanSwipeDamage} from './titan-limbs.js';
 import {createVoxelTitanRig,animateVoxelTitanRig} from './titan-voxel-rig.js';
+import {attachTitanGLB} from './titan-glb-models.js';
+import {titanRenderBudget,applyTitanRenderBudget} from './titan-render-budget.js';
 import {chooseNapeArcTarget,BLADE_ARC} from './scout-blade-arc.js';
 import {chooseTitanSteering,crowdSeparation} from './titan-navigation.js';
 import {gaitForTitan} from './titan-gait.js';
@@ -214,6 +216,7 @@ export function createEnemyManager(scene,world){
       const rig=enemy.rig;
       rig.group.visible=true;rig.group.position.copy(enemy.position);rig.group.rotation.set(0,0,0);
       rig.hips.quaternion.identity();rig.flash=0;rig.death=0;rig.gait=0;
+      rig.poseAccumulator=0;
       rig.weak.visible=true;rig.alert.visible=false;
       for(const side of ['left','right'])rig.arms[side].shoulder.visible=true;
     }
@@ -243,7 +246,22 @@ export function createEnemyManager(scene,world){
       }
       enemy.rig.group.position.copy(enemy.position);
       if(enemy.flash>0){enemy.rig.flash=Math.max(enemy.rig.flash,enemy.flash);enemy.flash=0;}
-      animateVoxelTitanRig(enemy.rig,enemy,dt,time);
+      const rig=enemy.rig,distance=enemy.position.distanceTo(playerPosition);
+      const budget=titanRenderBudget(distance,enemy.height,{previous:rig.lodLevel});
+      if(budget.lod==='high'&&rig.modelStatus==='deferred')
+        attachTitanGLB(rig,enemy.type);
+      // Game logic is still updated on every AI tick; only expensive
+      // pose interpolation and GPU mesh detail have distance budgets.
+      applyTitanRenderBudget(rig,budget);
+      rig.poseAccumulator=(rig.poseAccumulator||0)+dt;
+      if(rig.poseAccumulator>=budget.interval||!enemy.alive){
+        animateVoxelTitanRig(rig,enemy,rig.poseAccumulator,time);
+        rig.poseAccumulator=0;
+      }
+      // Combat-critical pose changes must never wait for distant LOD ticks.
+      rig.arms.left.shoulder.visible=!(enemy.armLeft>0);
+      rig.arms.right.shoulder.visible=!(enemy.armRight>0);
+      if(budget.lod==='hidden')rig.group.visible=false;
     }
     return result;
   }
