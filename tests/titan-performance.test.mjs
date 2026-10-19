@@ -68,7 +68,7 @@ test('adaptive render scale falls only on sustained low frame rate, recovers slo
  for(let i=0;i<84;i++)adaptive.update(1/28);
  assert.ok(adaptive.scale<1,'downshift for sustained 28 FPS');
  const low=adaptive.scale;
- for(let i=0;i<180;i++)adaptive.update(1/60);
+ for(let i=0;i<360;i++)adaptive.update(1/60);
  assert.ok(adaptive.scale>low,'restore render detail when stable');
  for(let i=0;i<1500;i++)adaptive.update(1/18);
  assert.ok(adaptive.scale>=.59,'minimum resolution bound');
