@@ -422,6 +422,7 @@ export function createVoxelWorld(scene){
     const c=V(center.x,center.y+height*.5,center.z),r=Math.min(68,radius);
     let pieces=0,colliders=0;
     for(const entry of destructibleMeshes){
+      let meshChanged=false;
       for(let i=0;i<entry.boxes.length;i++){
         if(entry.removed.has(i))continue;
         const [x,y,z,w,h,d]=entry.boxes[i];
@@ -430,9 +431,11 @@ export function createVoxelWorld(scene){
         entry.mesh.getMatrixAt(i,savedMatrix);
         originalMatrices.set(key,savedMatrix.clone());
         entry.mesh.setMatrixAt(i,zeroMatrix);
-        entry.removed.add(i);pieces++;
+        entry.removed.add(i);pieces++;meshChanged=true;
       }
-      if(entry.removed.size)entry.mesh.instanceMatrix.needsUpdate=true;
+      // Never reupload matrices of chunks that were damaged in PREVIOUS
+      // explosions but untouched by this one. Buffer uploads are expensive.
+      if(meshChanged)entry.mesh.instanceMatrix.needsUpdate=true;
     }
     for(let i=world.colliders.length-1;i>=0;i--){
       const b=world.colliders[i];
