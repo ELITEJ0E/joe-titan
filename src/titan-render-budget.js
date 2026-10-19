@@ -3,9 +3,12 @@
 export function titanRenderBudget(distance,height=15,{human=false,previous='low'}={}){
  if(human)return {lod:'high',shadow:true,interval:1/60};
  const d=Number.isFinite(distance)?Math.max(0,distance):Infinity;
- const high=Math.max(95,Math.min(174,95+height*1.75));
- const low=previous==='high'?high+24:high;
- const hidden=Math.max(270,Math.min(385,260+height*2.2));
+ // Detailed Meshy GLBs are retained for close-ups; at city-navigation
+ // distances use the far cheaper original voxel silhouette. This avoids
+ // skinning/rasterizing multi-megabyte assets across most of the skyline.
+ const high=Math.max(62,Math.min(110,58+height*1.5));
+ const low=previous==='high'?high+18:high;
+ const hidden=Math.max(255,Math.min(370,250+height*2.1));
  if(d>hidden)return {lod:'hidden',shadow:false,interval:1/10};
  if(d<=low)return {lod:'high',shadow:d<Math.max(70,height*2),interval:1/48};
  return {lod:'low',shadow:false,interval:1/15};
