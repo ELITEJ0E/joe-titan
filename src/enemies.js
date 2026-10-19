@@ -265,6 +265,34 @@ export function createEnemyManager(scene,world){
     }
     return result;
   }
+  // Screen-frustum culling happens after camera interpolation, on the
+  // render frame rather than at 48Hz AI ticks. Native Armored meshes request
+  // frustumCulled=false to avoid animation-bound clipping, so hiding their
+  // entire rig when offscreen is important for GPU frame time.
+  const frustum=new THREE.Frustum(),projectionView=new THREE.Matrix4(),
+    bounds=new THREE.Sphere();
+  function cullOffscreen(camera){
+    if(!camera)return 0;
+    camera.updateMatrixWorld();
+    projectionView.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(projectionView);
+    let culled=0;
+    for(const enemy of simulation.enemies){
+      const rig=enemy.rig;
+      if(!rig)continue;
+      const lod=rig.renderBudget?.lod||rig.lodLevel;
+      if(lod==='hidden'||(!enemy.alive&&rig.death>=1.5)){
+        rig.group.visible=false;continue;
+      }
+      bounds.center.copy(enemy.position);
+      bounds.center.y+=enemy.height*.52;
+      bounds.radius=Math.max(7,enemy.height*.85);
+      const visible=frustum.intersectsSphere(bounds);
+      rig.group.visible=visible;
+      if(!visible)culled++;
+    }
+    return culled;
+  }
   function strike(origin,direction,damage=22){
     const candidates=simulation.enemies.filter(enemy=>enemy.alive).sort((a,b)=>a.position.distanceToSquared(origin)-b.position.distanceToSquared(origin));
     for(const enemy of candidates){const result=strikeWeakPoint(enemy,origin,direction,damage,9.5);if(result.hit)return result;}
@@ -300,5 +328,5 @@ export function createEnemyManager(scene,world){
     return {kind:'none'};
   }
   function pulse(position,range,damage){let hits=0;for(const enemy of simulation.enemies){if(enemy.alive&&enemy.position.distanceTo(position)<=range){enemy.health=Math.max(0,enemy.health-damage);enemy.stagger=.9;if(enemy.health===0)enemy.alive=false;hits++;}}return hits;}
-  return {enemies:simulation.enemies,update,reset,strike,strikeArc,severArm,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
+  return {enemies:simulation.enemies,update,reset,cullOffscreen,strike,strikeArc,severArm,pulse,setDecoy:(position)=>{decoy=position.clone();decoyTimer=7;},suppress:()=>{slowTimer=7;},living:()=>simulation.enemies.filter(enemy=>enemy.alive).length};
 }
