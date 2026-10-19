@@ -132,8 +132,16 @@ export function createVoxelTitanRig(scene,enemy,{color=0x9b675c,height=15}={}){
   const rig={group,hips,torso,neck,head,arms,legs,weak,alert,skin,
     materials:[skin,shade,highlight,eye,mouth,gear,armor],height,flash:0,gait:0,death:0};
   if(TITAN_FORMS[enemy.type])enhanceTitanRig(rig,enemy.type);
-  // GLB visual replacement: model loads once and is cloned for every Titan.
-  if(TITAN_FORMS[enemy.type])attachTitanGLB(rig,enemy.type);
+  // Keep the lightweight voxel fallback for distance LOD. Enemy GLBs load
+  // only once the player gets close; player-controlled Titans load at once.
+  rig.fallbackMeshes=[];
+  rig.group.traverse(node=>{
+    if(node.isMesh&&node.geometry?.type!=='CircleGeometry')rig.fallbackMeshes.push(node);
+  });
+  if(TITAN_FORMS[enemy.type]){
+    if(enemy.id==='human-shifter')attachTitanGLB(rig,enemy.type);
+    else rig.modelStatus='deferred';
+  }
   return rig;
 }
 
@@ -151,6 +159,10 @@ export function animateVoxelTitanRig(rig,enemy,dt,time=0){
   const phase=enemy.attackPhase||'idle';
   const windup=phase==='windup',lunge=phase==='lunge',strike=phase==='strike';
   const stagger=enemy.stagger>0;
+  // Procedural pose bones are invisible when a GLB is displayed. Avoid
+  // computing dozens of slerps at 48 Hz for hidden fallback geometry.
+  const displayingGLB=rig.modelStatus==='loaded'&&rig.modelVisual?.visible;
+  if(!displayingGLB){
   rig.hips.position.y=.54+Math.abs(Math.sin(rig.gait))*.007*moving;
   smoothVoxelJoint(rig.torso,breathing+(lunge?-.33:windup?.23:strike?-.29:0)+(stagger?.23:0),
     strike?.17:Math.sin(time*.65)*.035,walk*.085,dt,11);
@@ -167,7 +179,8 @@ export function animateVoxelTitanRig(rig,enemy,dt,time=0){
     smoothVoxelJoint(leg.hip,-sign*walk*.85+(lunge?-.17:0),0,sign*.045,dt,10);
     smoothVoxelJoint(leg.knee,Math.max(0,sign*walk)*.65+.08,0,0,dt,10);
   }
-  animateTitanGLB(rig,enemy,dt,time);
+  }
+  if(displayingGLB)animateTitanGLB(rig,enemy,dt,time);
   rig.alert.visible=alerted;
   rig.alert.material.opacity=.72+.25*Math.sin(time*5)**2;
   rig.weak.material.opacity=enemy.state==='stagger'?1:.7+.26*Math.sin(time*3)**2;
