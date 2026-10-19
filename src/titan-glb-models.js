@@ -183,4 +183,10 @@ export function preloadTitanGLBs(kinds=Object.keys(TITAN_GLB_PATHS)){
 // Release the native Armored Titan's mixer and private materials when switching modes.
 export function disposeTitanGLBVisual(rig){
  if(rig.nativeArmored){disposeArmoredNative(rig.nativeArmored);rig.nativeArmored=null;}
+ // Skinned clones own Skeleton/bone textures, but NOT geometry/material
+ // buffers (those remain cached for subsequent Titans).
+ if(rig.modelSkeleton){
+  rig.modelSkeleton.skeleton.dispose();
+  rig.modelSkeleton=null;
+ }
 }
