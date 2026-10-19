@@ -14,6 +14,9 @@ export function applyTitanRenderBudget(rig,budget){
  if(!rig||!budget)return;
  const status=rig.modelStatus;
  const modelReady=status==='loaded'&&!!rig.modelVisual;
+ const unchanged=rig.lodLevel===budget.lod&&rig.shadowEnabled===budget.shadow&&rig.lastRenderReady===modelReady;
+ if(unchanged)return;
+ rig.lastRenderReady=modelReady;
  const high=budget.lod==='high';
  // When the GLB is still loading, keep the existing voxel sculpt readable.
  const fallbackVisible=budget.lod!=='hidden'&&(!modelReady||!high);
@@ -34,4 +37,5 @@ export function applyTitanRenderBudget(rig,budget){
  rig.lodLevel=budget.lod;
  rig.renderBudget=budget;
  if(budget.lod==='hidden')rig.group.visible=false;
+ else if(rig.death<1.5)rig.group.visible=true;
 }
