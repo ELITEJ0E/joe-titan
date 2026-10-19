@@ -572,14 +572,19 @@ function titanHudUpdate(){
 }
 const PHYSICS_STEP=1/240;
 let prevTime=0,accumulator=0,physicsTick=0,worldTime=0,lastPerfHud=0;
+let simulationCpuMs=0,renderSubmitMs=0,lastCulledTitans=0;
 function perfDiagnostics(){
   const r=renderer.info.render,m=renderer.info.memory;
+  const visibleGLB=enemies?.enemies?.filter(e=>e.rig?.modelStatus==='loaded'&&e.rig.group.visible&&e.rig.modelVisual?.visible).length||0;
   return `ESTIMATED FPS ${Math.round(graphics?.getEstimatedFps?.()||0)} · RES SCALE ${Math.round(100*(graphics?.getResolutionScale?.()||1))}%
 DRAW CALLS ${r.calls} · TRIANGLES ${r.triangles} · GEOMETRIES ${m.geometries} · TEXTURES ${m.textures}
-VISUALS ${graphics?.getQuality?.()||'performance'} · F3 CLOSE`;
+VISUALS ${graphics?.getQuality?.()||'performance'} · AO ${graphics?.getAOEnabled?.()?'ON':'AUTO OFF'}
+CPU GAME ${simulationCpuMs.toFixed(1)} ms · RENDER SUBMIT ${renderSubmitMs.toFixed(1)} ms (NOT GPU TIME)
+VISIBLE ENEMY GLBS ${visibleGLB} · FRUSTUM-CULLED TITANS ${lastCulledTitans} · F3 CLOSE`;
 }
 function loop(ms){
   requestAnimationFrame(loop);
+  const frameCpuStart=performance.now();
   const seconds=ms*.001,dt=Math.min(prevTime?seconds-prevTime:.016,.06);prevTime=seconds;
   gameTime+=dt;
   worldTime+=dt*(started&&!paused&&!finished?ackermanWorldScale(aspectState):1);
@@ -642,11 +647,15 @@ function loop(ms){
     $('diagnostics').textContent=perfDiagnostics()+
       (titanMode?`\nTITAN ${titanPlayer.form?.name||''} · ${titanPlayer.position.toArray().map(v=>v.toFixed(0)).join(' / ')}`:'');
   }
+  lastCulledTitans=enemies?.cullOffscreen?.(camera)||0;
   world.animate(worldTime,dt*ackermanWorldScale(aspectState));
   cutEffects?.update(dt);
   multiplayer?.render(dt);
   if(toast.classList.contains('show')&&seconds>toastUntil)toast.classList.remove('show');
+  simulationCpuMs=simulationCpuMs*.85+(performance.now()-frameCpuStart)*.15;
+  const renderBegin=performance.now();
   if(graphics){graphics.render();if(started&&!paused&&!finished)graphics.tickFrame(dt);}
   else renderer.render(scene,camera);
+  renderSubmitMs=renderSubmitMs*.85+(performance.now()-renderBegin)*.15;
 }
 init().catch(error=>{console.error(error);$('startMessage').textContent='Unable to initialize 3D renderer: '+error.message;$('startButton').disabled=true;});

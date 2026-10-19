@@ -89,9 +89,23 @@ function skinnedVisual(gltf,kind){
   geo.applyMatrix4(norm.clone().multiply(obj.matrixWorld));
   if(!geo.attributes.normal)geo.computeVertexNormals();
   const pos=geo.attributes.position,si=new Uint16Array(pos.count*4),sw=new Float32Array(pos.count*4);
+  // Allocation-free skin-weight assignment. Large Meshy exports can
+  // contain hundreds of thousands of vertices; allocating nested arrays
+  // for every vertex caused a significant GC spike during GLB preparation.
   for(let i=0;i<pos.count;i++){
-    const picks=classifyTitanVertex(pos.getX(i),pos.getY(i),pos.getZ(i));
-    for(let k=0;k<picks.length;k++){si[i*4+k]=picks[k][0];sw[i*4+k]=picks[k][1];}
+    const x=pos.getX(i),y=pos.getY(i),n=i*4,left=x<0;
+    let primary=1,secondary=0,blend=0;
+    if(y>.83&&Math.abs(x)<.21)primary=6;
+    else if(y>.54&&Math.abs(x)<.23)primary=1;
+    else if(y>.53&&Math.abs(x)>.23){
+      primary=left?2:4;secondary=left?3:5;
+      blend=clamp((.64-y)/.13,0,1);
+    }else if(y<=.54){
+      primary=left?7:9;secondary=left?8:10;
+      blend=clamp((.38-y)/.14,0,1);
+    }
+    si[n]=primary;sw[n]=1-blend;
+    if(blend>0){si[n+1]=secondary;sw[n+1]=blend;}
   }
   geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));
   geo.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
@@ -99,7 +113,7 @@ function skinnedVisual(gltf,kind){
   const mats=baseMaterials.map(m=>{
     const material=new THREE.MeshStandardMaterial({
       color:0xffffff,vertexColors:!!geo.attributes.color,roughness:.88,
-      flatShading:false,side:THREE.DoubleSide
+      flatShading:false,side:m.side??THREE.FrontSide
     });
     if(m.map)material.map=m.map;
     if(!geo.attributes.color&&!material.map)material.color.setHex(0xb18a78);

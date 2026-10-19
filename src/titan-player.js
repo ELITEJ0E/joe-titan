@@ -112,12 +112,15 @@ export function createTitanPlayer(scene,world,camera,enemies){
     const acceleration=clamp(dt*8,0,1);
     velocity.x+=(target.x*speed-velocity.x)*acceleration;
     velocity.z+=(target.z*speed-velocity.z)*acceleration;
-    const previous=position.clone();
     position.addScaledVector(velocity,dt);
+    const radius=clamp(form.height*.09,.7,4);
+    // The spatial grid keeps Titan physics close to O(nearby buildings)
+    // instead of scanning the complete city 240 times every second.
+    const nearby=world.nearbyColliders?.(position,radius+1.2)??world.colliders??[];
     // Charging directly through breakable architecture causes actual
     // geometry and collision removal, not an invisible collision bypass.
     if(walking&&impactCooldown<=0&&Math.hypot(velocity.x,velocity.z)>form.speed*.9){
-      const near=world.colliders?.some(box=>
+      const near=nearby.some(box=>
         Math.abs(position.x-box.x)<box.halfW+radiusForImpact(form.height)&&
         Math.abs(position.z-box.z)<box.halfD+radiusForImpact(form.height));
       if(near){
@@ -130,8 +133,7 @@ export function createTitanPlayer(scene,world,camera,enemies){
       }
     }
     // Resolve horizontal obstacle volumes with Titan-sized radii.
-    const radius=clamp(form.height*.09,.7,4);
-    for(const box of world.colliders||[]){
+    for(const box of nearby){
       if(Math.abs(position.x-box.x)>box.halfW+radius||
          Math.abs(position.z-box.z)>box.halfD+radius)continue;
       const bottom=world.terrainHeight?.(position.x,position.z)??0;

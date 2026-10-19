@@ -59,12 +59,22 @@ export function createGraphicsQuality(renderer,scene,camera,world,initial='perfo
     if(VISUAL_PRESETS[quality].bloom&&composer)composer.render();
     else renderer.render(scene,camera);
   }
+  function updateAOQuality(){
+    if(!aoPass)return;
+    const coarse=window.matchMedia?.('(pointer: coarse)')?.matches||false;
+    const struggling=dynamic.scale<.82||dynamic.fps<45;
+    const recovered=dynamic.scale>.91&&dynamic.fps>55;
+    if(quality!=='cinematic'||coarse||struggling)aoPass.enabled=false;
+    else if(recovered)aoPass.enabled=true;
+  }
   function tickFrame(dt){
-    // Performance mode stays lightweight; Cinematic retains AO/bloom,
-    // but downscales targets gradually instead of stalling on slow GPUs.
+    // Bypass only the expensive screen-space occlusion pass on slow devices.
+    // Keep original geometry, shadows, sky, normal maps, and bloom.
     if(dynamic.update(dt))resize();
+    updateAOQuality();
   }
   setQuality(initial);
   return {setQuality,getQuality:()=>quality,resize,render,tickFrame,
+    getAOEnabled:()=>!!(aoPass?.enabled&&quality==='cinematic'),
     getResolutionScale:()=>dynamic.scale,getEstimatedFps:()=>dynamic.fps};
 }

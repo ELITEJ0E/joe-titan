@@ -3,6 +3,7 @@ import {resolveWorldCollision} from './collision.js';
 import {decorateReferenceLandmarks} from './voxel-landmarks.js';
 import {ATMOSPHERE_DEFAULTS,sampleCinematicAtmosphere,createSkyUniforms,updateSkyUniforms,CINEMATIC_SKY_VERTEX,CINEMATIC_SKY_FRAGMENT} from './cinematic-atmosphere.js';
 import {makeVoxelPBRMaterial} from './voxel-surface-detail.js';
+import {createSpatialColliderIndex} from './spatial-collider-index.js';
 
 // A self-contained, low-draw-call voxel-inspired medieval city.
 // All building blocks sharing a material and 120m chunk become one InstancedMesh;
@@ -396,8 +397,16 @@ export function createVoxelWorld(scene){
   }
   // Precompute AABBs once. Camera checks can run each frame, so they must not
   // allocate hundreds of temporary boxes per ray.
-  const collisionBoxes=collidable.map(c=>new THREE.Box3(
-    V(c.x-c.halfW,0,c.z-c.halfD),V(c.x+c.halfW,c.h,c.z+c.halfD)));
+  const colliderIndex=createSpatialColliderIndex(world.colliders,24);
+  const collisionBoxes=new Map();
+  function refreshCollisionIndex(){
+    colliderIndex.rebuild(world.colliders);
+    collisionBoxes.clear();
+    for(const c of world.colliders)collisionBoxes.set(c,new THREE.Box3(
+      V(c.x-c.halfW,0,c.z-c.halfD),V(c.x+c.halfW,c.h,c.z+c.halfD)));
+  }
+  refreshCollisionIndex();
+  world.nearbyColliders=(point,radius=2)=>colliderIndex.query(point.x,point.z,radius);
   const ray=new THREE.Ray(),nearPoint=V(0,0,0);
   const originalColliders=[...world.colliders],originalAnchors=[...world.anchors];
   const zeroMatrix=new THREE.Matrix4().makeScale(0,0,0),savedMatrix=new THREE.Matrix4();
@@ -413,6 +422,7 @@ export function createVoxelWorld(scene){
     const c=V(center.x,center.y+height*.5,center.z),r=Math.min(68,radius);
     let pieces=0,colliders=0;
     for(const entry of destructibleMeshes){
+      let meshChanged=false;
       for(let i=0;i<entry.boxes.length;i++){
         if(entry.removed.has(i))continue;
         const [x,y,z,w,h,d]=entry.boxes[i];
@@ -421,9 +431,11 @@ export function createVoxelWorld(scene){
         entry.mesh.getMatrixAt(i,savedMatrix);
         originalMatrices.set(key,savedMatrix.clone());
         entry.mesh.setMatrixAt(i,zeroMatrix);
-        entry.removed.add(i);pieces++;
+        entry.removed.add(i);pieces++;meshChanged=true;
       }
-      if(entry.removed.size)entry.mesh.instanceMatrix.needsUpdate=true;
+      // Never reupload matrices of chunks that were damaged in PREVIOUS
+      // explosions but untouched by this one. Buffer uploads are expensive.
+      if(meshChanged)entry.mesh.instanceMatrix.needsUpdate=true;
     }
     for(let i=world.colliders.length-1;i>=0;i--){
       const b=world.colliders[i];
@@ -432,9 +444,7 @@ export function createVoxelWorld(scene){
       }
     }
     if(colliders){
-      collisionBoxes.length=0;
-      for(const b of world.colliders)collisionBoxes.push(new THREE.Box3(
-        V(b.x-b.halfW,0,b.z-b.halfD),V(b.x+b.halfW,b.h,b.z+b.halfD)));
+      refreshCollisionIndex();
       world.anchors=world.anchors.filter(a=>a.distanceTo(c)>r+3);
     }
     return {pieces,colliders};
@@ -451,15 +461,18 @@ export function createVoxelWorld(scene){
     originalMatrices.clear();
     world.colliders.splice(0,world.colliders.length,...originalColliders);
     world.anchors=[...originalAnchors];
-    collisionBoxes.length=0;
-    for(const b of world.colliders)collisionBoxes.push(new THREE.Box3(
-      V(b.x-b.halfW,0,b.z-b.halfD),V(b.x+b.halfW,b.h,b.z+b.halfD)));
+    refreshCollisionIndex();
   };
   world.grappleRay=(origin,dir,maxDist=125)=>{
     ray.set(origin,dir.clone().normalize());
     let best=null,closest=maxDist;
-    for(const box of collisionBoxes){
-      const hit=ray.intersectBox(box,nearPoint);
+    // Narrow queries for enemy navigation's frequent 3-10m rays; the
+    // broadphase still covers the full segment for long-range grapple aiming.
+    const mid=maxDist*.5;
+    const candidates=colliderIndex.query(origin.x+ray.direction.x*mid,
+      origin.z+ray.direction.z*mid,mid+2);
+    for(const candidate of candidates){
+      const hit=ray.intersectBox(collisionBoxes.get(candidate),nearPoint);
       if(!hit)continue;
       const dist=origin.distanceTo(hit);
       if(dist>.2&&dist<closest){closest=dist;best=hit.clone();}
@@ -481,7 +494,8 @@ export function createVoxelWorld(scene){
     return best?.clone()??null;
   };
   world.resolveCollision=(position,previous,velocity)=>{
-    const grounded=resolveWorldCollision(world.colliders,position,previous,velocity);
+    const nearby=world.nearbyColliders(position,2.4);
+    const grounded=resolveWorldCollision(nearby,position,previous,velocity);
     return grounded;
   };
   // Single batched emissive waypoint mesh per marker; no dynamic point lights.
