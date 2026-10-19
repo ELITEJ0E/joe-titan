@@ -5,11 +5,13 @@ import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {VISUAL_PRESETS,normaliseVisualQuality} from './shiganshina-visuals.js';
+import {createFrameBudgetController} from './adaptive-frame-budget.js';
 
 // Cinematic effects are optional. No postprocessing allocations are made while
 // playing in Performance mode (the default for the high-speed ODM game).
 export function createGraphicsQuality(renderer,scene,camera,world,initial='performance'){
   let quality='performance',composer=null,renderPass=null,bloomPass=null,aoPass=null;
+  const dynamic=createFrameBudgetController();
   const size=()=>({width:window.innerWidth,height:window.innerHeight});
   function getComposer(){
     if(composer)return composer;
@@ -30,7 +32,7 @@ export function createGraphicsQuality(renderer,scene,camera,world,initial='perfo
   function resize(){
     const {width,height}=size();
     const p=VISUAL_PRESETS[quality];
-    const pixelRatio=Math.min(window.devicePixelRatio||1,p.pixelRatio);
+    const pixelRatio=Math.min(window.devicePixelRatio||1,p.pixelRatio)*dynamic.scale;
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width,height,false);
     // Reduce internal render resolution slightly to offset the bloom pass.
@@ -40,7 +42,9 @@ export function createGraphicsQuality(renderer,scene,camera,world,initial='perfo
     }
   }
   function setQuality(next){
-    quality=normaliseVisualQuality(next);
+    const selected=normaliseVisualQuality(next);
+    if(selected!==quality)dynamic.reset();
+    quality=selected;
     const p=VISUAL_PRESETS[quality];
     renderer.toneMapping=THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure=p.exposure;
@@ -55,6 +59,12 @@ export function createGraphicsQuality(renderer,scene,camera,world,initial='perfo
     if(VISUAL_PRESETS[quality].bloom&&composer)composer.render();
     else renderer.render(scene,camera);
   }
+  function tickFrame(dt){
+    // Performance mode stays lightweight; Cinematic retains AO/bloom,
+    // but downscales targets gradually instead of stalling on slow GPUs.
+    if(dynamic.update(dt))resize();
+  }
   setQuality(initial);
-  return {setQuality,getQuality:()=>quality,resize,render};
+  return {setQuality,getQuality:()=>quality,resize,render,tickFrame,
+    getResolutionScale:()=>dynamic.scale,getEstimatedFps:()=>dynamic.fps};
 }
