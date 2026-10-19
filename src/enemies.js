@@ -258,6 +258,9 @@ export function createEnemyManager(scene,world){
         animateVoxelTitanRig(rig,enemy,rig.poseAccumulator,time);
         rig.poseAccumulator=0;
       }
+      // Combat-critical pose changes must never wait for distant LOD ticks.
+      rig.arms.left.shoulder.visible=!(enemy.armLeft>0);
+      rig.arms.right.shoulder.visible=!(enemy.armRight>0);
       if(budget.lod==='hidden')rig.group.visible=false;
     }
     return result;
